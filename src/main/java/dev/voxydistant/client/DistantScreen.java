@@ -2,13 +2,16 @@ package dev.voxydistant.client;
 
 import dev.voxydistant.config.DistantConfig;
 import dev.voxydistant.generation.GenerationController;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+import net.minecraftforge.client.event.ScreenEvent;
 import net.minecraftforge.common.ForgeConfigSpec;
+import net.minecraftforge.common.MinecraftForge;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -167,8 +170,18 @@ public final class DistantScreen extends Screen {
         return super.mouseScrolled(x, y, delta);
     }
 
+    static void renderSettingsBackground(Screen screen, GuiGraphics graphics) {
+        if (Minecraft.getInstance().level == null) {
+            screen.renderBackground(graphics);
+            return;
+        }
+        // Reduce the vanilla gradient's opacity by 64/255 (about 25 percentage points).
+        graphics.fillGradient(0, 0, screen.width, screen.height, 0x80101010, 0x90101010);
+        MinecraftForge.EVENT_BUS.post(new ScreenEvent.BackgroundRendered(screen, graphics));
+    }
+
     @Override public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        renderBackground(graphics);
+        renderSettingsBackground(this, graphics);
         int span = contentWidth(), left = (width - span) / 2;
         graphics.drawCenteredString(font, page < 0 ? title : Component.literal("Voxy Distant · " + TITLES[page]), width / 2, 12, 0xFFFFFF);
         if (page >= 0) {

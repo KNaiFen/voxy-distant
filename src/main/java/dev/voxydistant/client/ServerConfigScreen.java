@@ -137,7 +137,7 @@ public final class ServerConfigScreen extends Screen {
         return super.mouseScrolled(x, y, delta);
     }
     @Override public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        renderBackground(graphics); int span = contentWidth(), left = (width - span) / 2;
+        DistantScreen.renderSettingsBackground(this, graphics); int span = contentWidth(), left = (width - span) / 2;
         graphics.drawCenteredString(font, group < 0 ? title : Component.literal("服务端设置 · " + groups.get(group)), width / 2, 10, 0xFFFFFF);
         graphics.drawString(font, connection == null ? "本机配置 · 进入世界后使用服务器配置" : "当前服务器 · OP 等级 ≥2 · 保存后在线应用", left, 28, 0xAAAAAA);
         if (loaded && group >= 0) {
