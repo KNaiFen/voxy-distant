@@ -29,6 +29,8 @@ class MovementPredictionTest {
             }
         }
         var clipped=new RequestShape(0,0,1,0,1,0,1,32,32);assertFalse(clipped.contains(33,0));assertTrue(clipped.contains(32,0));
+        var forward=new RequestShape(0,0,10,0,1,0,1,2048,2048);assertTrue(forward.contains(2048,0));assertFalse(forward.contains(2049,0));
+        assertTrue(new RequestShape(0,0,1,0,1,0,1,24,2048).contains(36,0),"local front exceeds the old radius");
     }
     @Test void rectangleMinimumMatchesNumericalConvexSearch(){
         var random=new java.util.Random(614);
