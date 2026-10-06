@@ -11,11 +11,13 @@ import static org.junit.jupiter.api.Assertions.*;
 class RegionDiscoveryTest {
     @Test void scanlineMasksMatchReferenceAcrossMovement(){
         var random=new java.util.Random(991);
-        for(var values:List.of(List.of("32:0","64:1","96:2"),List.of("16:0","32:1","64:2"),List.of("8:0","24:0","64:3"),List.of("64:4"))){
+        for(var values:List.of(List.of("32:0","64:1","96:2"),List.of("16:0","32:1","64:2"),List.of("8:0","16:1","24:2"),List.of("8:0","24:0","64:3"),List.of("64:4"))){
             var bands=DistanceBands.parse(values);var scan=new RegionDiscovery(bands);
-            for(int step=-10;step<80;step++){
+            for(int step=-11;step<80;step++){
                 dev.voxydistant.movement.RequestShape shape;
-                if(step<-8)shape=dev.voxydistant.movement.RequestShape.circle(step+3,3,256);
+                if(step==-11)shape=new dev.voxydistant.movement.RequestShape(0,0,-Math.sqrt(.5)*7.5,Math.sqrt(.5)*7.5,-Math.sqrt(.5),Math.sqrt(.5),1,24,24);
+                else if(step==-10)shape=new dev.voxydistant.movement.RequestShape(0,0,0,0,-0.7071067811865475,0.7071067811865475,0,24,24);
+                else if(step<-8)shape=dev.voxydistant.movement.RequestShape.circle(step+3,3,256);
                 else if(step<0){double angle=(step+8)*Math.PI/4;shape=new dev.voxydistant.movement.RequestShape(-3,-9,-2,-8,Math.cos(angle),Math.sin(angle),1,96,128).precision(step%2==0?1:.5);}
                 else{double angle=random.nextDouble()*2*Math.PI;int px=random.nextInt(160)-80,pz=random.nextInt(160)-80;
                     shape=new dev.voxydistant.movement.RequestShape(px,pz,px+random.nextDouble()*4-2,pz+random.nextDouble()*4-2,Math.cos(angle),Math.sin(angle),random.nextDouble(),step==0?0:16+random.nextInt(64),96).precision(step%8==0?0:.25+random.nextDouble()*.75);}

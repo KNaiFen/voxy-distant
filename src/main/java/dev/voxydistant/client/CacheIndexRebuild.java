@@ -25,7 +25,7 @@ public final class CacheIndexRebuild {
         if(mc.level==null){source.sendFailure(Component.literal("请先进入需要重建索引的世界"));return 0;}
         if(active!=null&&active.worker.isAlive()){source.sendFailure(Component.literal("已有索引重建正在进行，请等待完成"));return 0;}
         var world=VoxyBridge.acquire(mc.level);
-        if(world==null){source.sendFailure(Component.literal("请先开启 Voxy 渲染与摄取"));return 0;}
+        if(world==null){source.sendFailure(Component.literal("请先开启 Voxy 渲染"));return 0;}
         var task=new Task(world,mc.level,mc.getConnection());active=task;
         source.sendSuccess(()->Component.literal("开始在后台强制重建当前服务器 / 当前维度的 Voxy LOD 索引："+mc.level.dimension().location()),false);
         task.worker.start();return 1;

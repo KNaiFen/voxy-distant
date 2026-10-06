@@ -50,7 +50,7 @@ public final class GenerationController {
         var active=session;
         if(active!=null&&active.level.dimension()==mc.level.dimension()){
             if(offer!=null&&offered.compareAndSet(offer,null))offer.engine().releaseRef();
-        }else if(offer==null) {
+        }else if(offer==null&&me.cortex.voxy.client.config.VoxyConfig.CONFIG.ingestEnabled) {
             var engine=VoxyBridge.acquire(mc.level);if(engine!=null)offered.set(new Offer(engine,mc.level.dimension()));
         }
         var previous=target;
@@ -151,7 +151,7 @@ public final class GenerationController {
                 workers.setMaximumPoolSize(limits.threads());
             }
             drainFinished();
-            boolean enabled = DistantConfig.ENABLED.get() && VoxyBridge.enabled();
+            boolean enabled = DistantConfig.ENABLED.get() && VoxyBridge.enabled() && me.cortex.voxy.client.config.VoxyConfig.CONFIG.ingestEnabled;
             if (enabled&&!desired.paused()&&(centerX==Integer.MIN_VALUE||Math.abs((long)centerX-desired.x())>32||Math.abs((long)centerZ-desired.z())>32||radius != desired.radius() || view != desired.view()||movementRevision!=desired.motion().revision())) {
                 centerX = desired.x(); centerZ = desired.z(); radius = desired.radius(); view = desired.view();
                 long timing=dev.voxydistant.DebugLog.start();movementRevision=desired.motion().revision();discovery.move(desired.motion().shape(radius,2048),view);dev.voxydistant.DebugLog.end(dev.voxydistant.DebugLog.Metric.LOCAL_RANGE,timing);

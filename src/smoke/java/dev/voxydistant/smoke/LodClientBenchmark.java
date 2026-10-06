@@ -101,6 +101,7 @@ public final class LodClientBenchmark {
         state.addProperty("receive_memory_mib",DistantConfig.RECEIVE_MIB.get());
         state.addProperty("request_window_columns",DistantConfig.REQUEST_WINDOW.get());
         state.addProperty("mask_bypass",Boolean.getBoolean("voxyDistant.maskBypass"));
+        state.addProperty("auto_ingest",me.cortex.voxy.client.config.VoxyConfig.CONFIG.ingestEnabled);
         var motion=dev.voxydistant.movement.MovementPrediction.CLIENT.snapshot();state.addProperty("prediction_speed",motion.speed());state.addProperty("prediction_amount",motion.amount());state.addProperty("prediction_center_x",motion.centerX());state.addProperty("prediction_center_z",motion.centerZ());
         state.addProperty("cruise_segment",cruiseSegment);state.addProperty("cruise_done",cruiseRoute!=null&&cruiseSegment>=cruiseRoute.size());
         var local=dev.voxydistant.generation.GenerationController.status();state.addProperty("local_completed",local.completed());state.addProperty("local_generating",local.generating());state.addProperty("local_converting",local.converting());state.addProperty("local_bytes",local.bytes());state.addProperty("local_reason",local.reason());state.addProperty("local_failure",local.failure());
@@ -152,7 +153,8 @@ public final class LodClientBenchmark {
             if(distance<=step){cameraX=x;cameraZ=z;cruiseSegment++;}else{cameraX+=dx/distance*step;cameraZ+=dz/distance*step;}
             if(Boolean.getBoolean("voxyDistant.cpuCheck")){var p=mc.player;p.move(net.minecraft.world.entity.MoverType.SELF,new net.minecraft.world.phys.Vec3(cameraX-p.getX(),0,cameraZ-p.getZ()));p.setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);p.connection.send(new net.minecraft.network.protocol.game.ServerboundMovePlayerPacket.Pos(p.getX(),p.getY(),p.getZ(),p.onGround()));}
         }
-        if(Boolean.getBoolean("voxyDistant.fixedCamera")&&Minecraft.getInstance().player!=null){var p=Minecraft.getInstance().player;p.setPos(cameraX,180,cameraZ);p.setYRot(cameraYaw);p.setXRot(15);}
+        if(Boolean.getBoolean("voxyDistant.fixedCamera")&&Minecraft.getInstance().player!=null){var p=Minecraft.getInstance().player;p.setPos(cameraX,180,cameraZ);p.setYRot(cameraYaw);p.setXRot(15);
+            if(cruiseRoute!=null&&cruiseSegment<cruiseRoute.size())p.connection.send(new net.minecraft.network.protocol.game.ServerboundMovePlayerPacket.Pos(cameraX,180,cameraZ,p.onGround()));}
         if(Boolean.getBoolean("voxyDistant.cpuCheck")&&mc.screen instanceof net.minecraft.client.gui.screens.PauseScreen)mc.setScreen(null);
         long now=System.nanoTime();if(now-lastSample<1_000_000_000)return;lastSample=now;
         try {
@@ -192,6 +194,7 @@ public final class LodClientBenchmark {
                         }
                         else if(command.equals("receive")){if(mc.level==null||RemoteClient.greeting()==null)throw new IllegalStateException("World or LOD handshake not ready");if(Boolean.getBoolean("voxyDistant.fixedCamera")){mc.options.pauseOnLostFocus=false;mc.setScreen(null);}recording=Boolean.getBoolean("voxyDistant.recordProcess");DistantConfig.RECEIVE.set(true);}
                         else if(command.equals("receive-disable")){DistantConfig.RECEIVE.set(false);}
+                        else if(command.equals("auto-ingest")){me.cortex.voxy.client.config.VoxyConfig.CONFIG.ingestEnabled=request.get("enabled").getAsBoolean();}
                         else if(command.equals("prediction-toggle")){DistantConfig.MOVEMENT_PREDICTION.set(request.get("enabled").getAsBoolean());}
                         else if(command.equals("cpu-view")){mc.options.pauseOnLostFocus=false;mc.options.enableVsync().set(false);mc.getWindow().updateVsync(false);mc.options.framerateLimit().set(260);mc.setScreen(null);mc.player.setYRot(0);mc.player.setXRot(15);}
                         else if(command.equals("disconnect")){if(mc.level==null)throw new IllegalStateException("Not in a world");mc.level.disconnect();mc.clearLevel();mc.setScreen(new TitleScreen());}
@@ -249,7 +252,10 @@ public final class LodClientBenchmark {
                         if(dx*dx+dz*dz>radius*radius)continue;
                         int x=mc.player.chunkPosition().x+dx,z=mc.player.chunkPosition().z+dz;
                         var stamp=coverage.column(x,z,mc.level.getMinSection(),mc.level.getMaxSection());auditedLevels[stamp.level()]++;
-                        if(stamp.level()>((dev.voxydistant.config.DistanceBands)LodMetrics.field(session,"bands")).select(x,z,mc.player.chunkPosition().x,mc.player.chunkPosition().z))auditedInsufficient++;
+                        if(stamp.level()>((dev.voxydistant.config.DistanceBands)LodMetrics.field(session,"bands")).select(x,z,mc.player.chunkPosition().x,mc.player.chunkPosition().z)){
+                            auditedInsufficient++;long p=net.minecraft.world.level.ChunkPos.asLong(x,z);
+                            System.out.println("DISTANT_AUDIT_INSUFFICIENT x="+x+" z="+z+" stamp="+stamp+" loaded="+((Set<?>)LodMetrics.field(session,"loadedFull")).contains(p)+" version="+((Map<?,?>)LodMetrics.field(session,"versions")).get(p));
+                        }
                         if(stamp.level()==5)System.out.println("DISTANT_AUDIT_MISSING x="+x+" z="+z+" full_retry="+fullRetry+" queue="+queue+" active="+active);
                     }
                     if(auditCursor==width*width){

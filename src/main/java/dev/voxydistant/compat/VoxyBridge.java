@@ -32,13 +32,13 @@ public final class VoxyBridge {
 
     public static WorldEngine acquire(Level clientLevel) {
         var instance = VoxyCommon.getInstance();
-        if (instance == null || !instance.isRunning() || !VoxyConfig.CONFIG.isRenderingEnabled()
-                || !VoxyConfig.CONFIG.ingestEnabled) return null;
+        if (instance == null || !instance.isRunning() || !enabled()) return null;
         return instance.getOrCreate(WorldIdentifier.of(clientLevel), true);
     }
 
     public static int radiusChunks() { return Math.max(0, (int) (VoxyConfig.CONFIG.sectionRenderDistance * 32)); }
-    public static boolean enabled() { return VoxyConfig.CONFIG.isRenderingEnabled() && VoxyConfig.CONFIG.ingestEnabled; }
+    // Remote reception owns its snapshots and must not depend on Voxy's automatic local ingest switch.
+    public static boolean enabled() { return VoxyConfig.CONFIG.isRenderingEnabled(); }
 
     public static boolean backedUp(WorldEngine world) {
         return world.instanceIn.getIngestService().getTaskCount() >= 512

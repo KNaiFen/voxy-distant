@@ -20,12 +20,6 @@ public final class RetryQueue {
         Retry next=new Retry(position,now+TimeUnit.SECONDS.toNanos(seconds),attempts,desired,priority);
         entries.put(position,next);queue(next).add(next);return next;
     }
-    /** Wait for a finer distance band or a Dirty notification after an identical insufficient result. */
-    public void stalled(long position,int desired,boolean priority){
-        Retry previous=entries.get(position);if(previous!=null)queue(previous).remove(previous);
-        Retry next=new Retry(position,Long.MAX_VALUE,previous==null?1:previous.attempts()+1,desired,priority);
-        entries.put(position,next);queue(next).add(next);
-    }
     public Long poll(long now){
         var ready=!urgent.isEmpty()&&urgent.first().due()<=now?urgent:distant;
         if(ready.isEmpty()||ready.first().due()>now)return null;

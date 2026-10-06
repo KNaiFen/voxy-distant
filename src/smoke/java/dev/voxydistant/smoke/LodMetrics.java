@@ -56,6 +56,12 @@ public final class LodMetrics {
                 if(server!=null){
                     var workers=(ThreadPoolExecutor)field(server,"workers");long pending=0,queued=0,reserved=0,credit=0;
                     var players=((Map<?,?>)field(server,"players")).values();
+                    for(Object session:players){
+                        var player=(net.minecraft.server.level.ServerPlayer)field(session,"player");
+                        var file=LodBenchmark.OUTPUT.resolve("player-positions.csv");
+                        if(!Files.exists(file))Files.writeString(file,"epoch_ms,x,z\n");
+                        Files.writeString(file,System.currentTimeMillis()+","+player.getX()+","+player.getZ()+"\n",StandardOpenOption.APPEND);
+                    }
                     for(Object session:players){pending+=((Map<?,?>)field(session,"pending")).size();queued+=(long)field(session,"bytes");reserved+=(long)field(session,"reserved");credit+=(int)field(session,"capacity");}
                     serverSamples.printf(Locale.ROOT,"%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d%n",now,((com.sun.management.OperatingSystemMXBean)ManagementFactory.getOperatingSystemMXBean()).getProcessCpuTime(),field(server,"hits"),field(server,"misses"),field(server,"completed"),field(server,"sentBytes"),((Map<?,?>)field(server,"work")).size(),workers.getQueue().size(),workers.getActiveCount(),pending,queued,reserved,players.size(),credit);
                     Files.writeString(LodBenchmark.OUTPUT.resolve("batch-flushes.jsonl"),"{\"time_ns\":"+now+",\"full_budget_tail_tick\":"+Arrays.toString((long[])field(server,"batchFlushes"))+"}\n",StandardOpenOption.CREATE,StandardOpenOption.APPEND);
