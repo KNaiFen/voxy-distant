@@ -112,6 +112,30 @@ public final class ClientSmoke {
         check((active.get(parent)&0xc0000000)==0&&store.getNodeGeometry(active.get(parent)&0xffffff)==me.cortex.voxy.client.core.rendering.hierachical.NodeManager.EMPTY_GEOMETRY_ID,"explicit air replaces children with valid empty geometry");
         check((store.getNodeChildExistence(active.get(parent)&0xffffff)&255)==0,"explicit air clears final child mask");
         nodes.removeTopLevelNode(parent);coverage.closeUnconfirmed();emptyCoverage.closeUnconfirmed();
+        // Collapsing a nested inner node must also update its parent's cached leaf flag.
+        for(boolean eviction:new boolean[]{false,true}){
+            long root=CoverageStore.node(3,0,0,0),nested=CoverageStore.node(2,0,0,0),sibling=CoverageStore.node(2,1,0,0),bottom=CoverageStore.node(1,0,0,0);
+            nodes.insertTopLevelNode(root);nodes.processGeometryResult(mesh(root,3));nodes.processRequest(root);
+            nodes.processGeometryResult(mesh(nested,1));nodes.processGeometryResult(mesh(sibling,1));
+            var changes=nodes._generateChangeList();changes.free();
+            nodes.processRequest(nested);nodes.processGeometryResult(mesh(bottom,0));
+            var updatesField=nodes.getClass().getDeclaredField("nodeUpdates");updatesField.setAccessible(true);
+            var updates=(it.unimi.dsi.fastutil.ints.IntSet)updatesField.get(nodes);
+            check(updates.contains(active.get(root)&0xffffff),"nested split publishes parent's leaf flag to GPU");
+            nodes.processRequest(sibling);nodes.processGeometryResult(mesh(CoverageStore.node(1,2,0,0),0));
+            nodes.verifyIntegrity();
+            if(eviction)nodes.removeNodeGeometry(bottom);
+            else{nodes.processChildChange(nested,(byte)0);nodes.processGeometryResult(mesh(nested,0));}
+            check((active.get(nested)&0xc0000000)==0,"nested node collapses to leaf");
+            check(!store.getAllChildrenAreLeaf(active.get(root)&0xffffff),"remaining inner sibling keeps parent ineligible for cleaning");
+            nodes.verifyIntegrity();changes=nodes._generateChangeList();changes.free();
+            if(eviction)nodes.removeNodeGeometry(CoverageStore.node(1,2,0,0));
+            else{nodes.processChildChange(sibling,(byte)0);nodes.processGeometryResult(mesh(sibling,0));}
+            check(store.getAllChildrenAreLeaf(active.get(root)&0xffffff),"last collapsed sibling restores parent's leaf flag");
+            check(updates.contains(active.get(root)&0xffffff),"nested collapse publishes parent's leaf flag to GPU");
+            System.out.println("DISTANT_NESTED_COLLAPSE_CHECK: eviction="+eviction);
+            nodes.verifyIntegrity();nodes.removeTopLevelNode(root);
+        }
         System.out.println("DISTANT_NODE_SWITCH_PASS: real Voxy split and collapse both wait for replacement meshes");
     }
     private static me.cortex.voxy.client.core.rendering.building.BuiltSection mesh(long pos,int children){return new me.cortex.voxy.client.core.rendering.building.BuiltSection(pos,(byte)children,0,new me.cortex.voxy.common.util.MemoryBuffer(8),new int[8],null);}

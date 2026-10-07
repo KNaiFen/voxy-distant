@@ -14,7 +14,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public abstract class NodeCollapseMixin {
     @Shadow @Final private Long2IntOpenHashMap activeSectionMap;
     @Shadow @Final private NodeStore nodeData;
+    @Shadow @Final private LongOpenHashSet topLevelNodes;
     @Shadow @Final private me.cortex.voxy.client.core.rendering.ISectionWatcher watcher;
+    @Shadow protected abstract void invalidateNode(int nodeId);
     @Shadow public abstract void processRequest(long pos);
     @Shadow public abstract void processChildChange(long pos,byte mask);
     @Unique private final LongOpenHashSet distant$collapse=new LongOpenHashSet();
@@ -81,6 +83,28 @@ public abstract class NodeCollapseMixin {
     }
     @Inject(method="removeTopLevelNode",at=@At("RETURN"))
     private void distant$prune(long pos,CallbackInfo ci){distant$collapse.removeIf(p->!activeSectionMap.containsKey(p));distant$rebuilding.keySet().removeIf((long p)->!activeSectionMap.containsKey(p));}
+    @Inject(method="updateChildSectionsInner",at=@At("RETURN"))
+    private void distant$collapsed(long pos,int nodeId,byte mask,CallbackInfo ci){
+        if(mask==0)distant$updateParentLeafFlag(pos);
+    }
+    @Inject(method="processLeafGeometryRemoval",at=@At("RETURN"))
+    private void distant$evicted(long child,CallbackInfo ci){
+        long pos=me.cortex.voxy.common.world.WorldEngine.getWorldSectionId(me.cortex.voxy.common.world.WorldEngine.getLevel(child)+1,me.cortex.voxy.common.world.WorldEngine.getX(child)>>1,me.cortex.voxy.common.world.WorldEngine.getY(child)>>1,me.cortex.voxy.common.world.WorldEngine.getZ(child)>>1);
+        if((activeSectionMap.get(pos)&0xc0000000)==0)distant$updateParentLeafFlag(pos);
+    }
+    // Voxy clears the grandparent's flag on split but does not publish that change to the GPU.
+    @Redirect(method="finishRequest(ILme/cortex/voxy/client/core/rendering/hierachical/NodeChildRequest;)V",at=@At(value="INVOKE",target="Lme/cortex/voxy/client/core/rendering/hierachical/NodeStore;setAllChildrenAreLeaf(IZ)V",ordinal=1))
+    private void distant$publishSplit(NodeStore store,int id,boolean value){store.setAllChildrenAreLeaf(id,value);invalidateNode(id);}
+    @Unique private void distant$updateParentLeafFlag(long pos){
+        if(topLevelNodes.contains(pos))return;
+        long parent=me.cortex.voxy.common.world.WorldEngine.getWorldSectionId(me.cortex.voxy.common.world.WorldEngine.getLevel(pos)+1,me.cortex.voxy.common.world.WorldEngine.getX(pos)>>1,me.cortex.voxy.common.world.WorldEngine.getY(pos)>>1,me.cortex.voxy.common.world.WorldEngine.getZ(pos)>>1);
+        int id=activeSectionMap.get(parent)&0xffffff;
+        int ptr=nodeData.getChildPtr(id),count=nodeData.getChildPtrCount(id);
+        // Only direct siblings change eligibility; at most eight entries, on the node owner thread.
+        boolean allLeaf=true;
+        for(int i=0;i<count;i++)if((activeSectionMap.get(nodeData.nodePosition(ptr+i))&0xc0000000)!=0){allLeaf=false;break;}
+        if(nodeData.getAllChildrenAreLeaf(id)!=allLeaf){nodeData.setAllChildrenAreLeaf(id,allLeaf);invalidateNode(id);}
+    }
     @Inject(method="removeNodeGeometry",at=@At("HEAD"),cancellable=true)
     private void distant$keepReplacement(long pos,CallbackInfo ci){
         long parent=pos;

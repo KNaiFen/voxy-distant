@@ -379,7 +379,8 @@ public final class RemoteServer {
         if(!self.players.containsKey(player.getUUID()))self.addPlayer(player);
         if(!self.players.containsKey(player.getUUID()))return;
         Key key=new Key(player.level().dimension(),x,z);
-        long version=self.versions.computeIfAbsent(key,k -> self.sequence.incrementAndGet());
+        // A vanilla revision must outlive the loaded chunk; otherwise pruning revives an older cache.
+        long version=self.versions.computeIfAbsent(key,k -> {long revision=self.sequence.incrementAndGet();self.dirty.put(k,revision);return revision;});
         self.players.get(player.getUUID()).vanilla.add(key.pos());
         if(!self.exclusiveImport()&&!self.importStorageFailed)Protocol.send(player,new Protocol.Dirty(key.dimension.location().toString(),x,z,version,true));
     }

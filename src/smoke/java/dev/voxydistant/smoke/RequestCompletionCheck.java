@@ -166,6 +166,33 @@ public final class RequestCompletionCheck {
                 System.out.println("DISTANT_LOADED_REVISION_PASS: range pruning keeps loaded vanilla captures eligible without retaining unloaded revisions");
             }catch(ReflectiveOperationException e){throw new CompletionException(e);}
         },worker);
+        long phantom=ChunkPos.asLong(18,1);
+        chain=chain.thenRunAsync(()->{
+            try{
+                var loaded=(Set<Long>)field(type,"loadedFull").get(session);loaded.add(phantom);versions.put(phantom,version+8);
+                pending.clear();invalid.clear();retries.clear();checked.remove(phantom);fullRetry.remove(phantom);
+                Object discovery=field(type,"discovery").get(session);
+                var reset=discovery.getClass().getDeclaredMethod("reset");reset.setAccessible(true);reset.invoke(discovery);
+                var move=discovery.getClass().getDeclaredMethod("move",int.class,int.class,int.class);move.setAccessible(true);move.invoke(discovery,0,0,64);
+                var regions=(Map<?,?>)field(discovery.getClass(),"regions").get(discovery);
+                var local=discovery.getClass().getDeclaredMethod("local",Class.forName("dev.voxydistant.client.RegionDiscovery$Region"),CoverageStore.Directory.class);local.setAccessible(true);
+                for(Object region:regions.values()){int rx=field(region.getClass(),"x").getInt(region),rz=field(region.getClass(),"z").getInt(region);local.invoke(discovery,region,VoxyBridge.coverage(engine).directory(rx,rz,false));}
+                var request=RemoteClient.class.getDeclaredMethod("requestMore",type);request.setAccessible(true);paused.setBoolean(null,false);
+                var update=discovery.getClass().getDeclaredMethod("updated",long.class,CoverageStore.Stamp.class);update.setAccessible(true);update.invoke(discovery,phantom,new CoverageStore.Stamp(version+8,5));
+                try{for(int i=0;i<100&&!fullRetry.contains(phantom);i++){pending.clear();field(type,"requestBudget").setInt(session,64);request.invoke(null,session);}}
+                finally{paused.setBoolean(null,true);}
+                check(fullRetry.contains(phantom),"discovered gap rechecks stale vanilla loaded hint: state="+field(type,"requestState").get(session)+" loaded="+loaded.contains(phantom)+" radius="+field(type,"radius").getInt(session));
+            }catch(ReflectiveOperationException e){throw new CompletionException(e);}
+        },worker).thenRunAsync(()->{
+            try{
+                check(mc.level.getChunkSource().getChunk(18,1,net.minecraft.world.level.chunk.ChunkStatus.FULL,false)==null,"phantom chunk is outside vanilla storage");
+                ((Set<Long>)field(type,"captureRequested").get(session)).add(phantom);
+                var capture=RemoteClient.class.getDeclaredMethod("capture",type);capture.setAccessible(true);paused.setBoolean(null,false);try{capture.invoke(null,session);}finally{paused.setBoolean(null,true);}
+                check(!((Set<Long>)field(type,"loadedFull").get(session)).contains(phantom)&&((Set<Long>)field(type,"unloaded").get(session)).contains(phantom),"missing vanilla chunk stops suppressing remote requests");
+                pending.clear();fullRetry.clear();versions.remove(phantom);
+                System.out.println("DISTANT_PHANTOM_LOADED_PASS: discovered gap rechecks vanilla hint and missing chunk returns to remote scheduling");
+            }catch(ReflectiveOperationException e){throw new CompletionException(e);}
+        },mc);
         long delayed=ChunkPos.asLong(55,0);
         chain=chain.thenRunAsync(()->{
             try{pending.put(delayed,pendingConstructor.newInstance(System.nanoTime(),2,2,2L));}

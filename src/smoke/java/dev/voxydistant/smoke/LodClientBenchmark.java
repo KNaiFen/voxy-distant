@@ -202,14 +202,22 @@ public final class LodClientBenchmark {
                         else if(command.equals("reload")){DistantConfig.reload();}
                         else if(command.equals("renderer")){dev.voxydistant.compat.VoxyBridge.resetRenderer();}
                         else if(command.equals("turn")){cameraYaw+=90;}
-                        else if(command.equals("move-camera")){cameraX=request.get("x").getAsDouble();cameraZ=request.get("z").getAsDouble();mc.player.setPos(cameraX,180,cameraZ);}
+                        else if(command.equals("move-camera")){cruiseRoute=null;cameraX=request.get("x").getAsDouble();cameraZ=request.get("z").getAsDouble();mc.player.setPos(cameraX,180,cameraZ);}
+                        else if(command.equals("receive-radius")){DistantConfig.RECEIVE_RADIUS.set(request.get("radius").getAsInt());}
                         else if(command.equals("cruise")){cruiseRoute=request.getAsJsonArray("waypoints");cruiseSegment=0;cruiseSpeed=request.has("speed")?request.get("speed").getAsDouble():22;}
                         else if(command.equals("prediction-local")){mc.options.pauseOnLostFocus=false;mc.setScreen(null);DistantConfig.RECEIVE.set(false);DistantConfig.ENABLED.set(true);DistantConfig.RADIUS.set(24);}
                         else if(command.equals("local-disable")){holdLocalPause=false;mc.setScreen(null);DistantConfig.ENABLED.set(false);}
                         else if(command.equals("local-pause")){holdLocalPause=true;mc.setScreen(new net.minecraft.client.gui.screens.PauseScreen(true));}
                         else if(command.equals("mask-off")){System.setProperty("voxyDistant.maskBypass","true");}
                         else if(command.equals("mask-on")){System.setProperty("voxyDistant.maskBypass","false");}
-                        else if(command.equals("audit")){auditCursor=0;auditedLevels=new int[6];auditedInsufficient=0;}
+                        else if(command.equals("audit")){
+                            auditCursor=0;auditedLevels=new int[6];auditedInsufficient=0;
+                            if(Boolean.getBoolean("voxyDistant.nodeDiagnostic")){
+                                var renderer=me.cortex.voxy.client.core.IGetVoxyRenderSystem.getNullable();
+                                var batch=new me.cortex.voxy.common.util.MemoryBuffer(8);org.lwjgl.system.MemoryUtil.memPutLong(batch.address,0);
+                                ((me.cortex.voxy.client.core.rendering.hierachical.AsyncNodeManager)LodMetrics.field(renderer,"nodeManager")).submitRequestBatch(batch);
+                            }
+                        }
                         else if(command.equals("request-check")){
                             RequestCompletionCheck.run().whenComplete((unused,error)->{
                                 try{var details=state();if(error!=null)details.addProperty("error",error.toString());ack(id,error==null?"ok":"error",details);}
@@ -247,6 +255,7 @@ public final class LodClientBenchmark {
                     int radius=(int)LodMetrics.field(session,"radius"),width=radius*2+1;
                     var engine=(me.cortex.voxy.common.world.WorldEngine)LodMetrics.field(session,"engine");
                     var coverage=dev.voxydistant.compat.VoxyBridge.coverage(engine);
+                    var lightField=RemoteClient.class.getDeclaredField("lightReady");lightField.setAccessible(true);var lightReady=(Set<?>)lightField.get(null);
                     for(int budget=0;budget<8192&&auditCursor<width*width;budget++,auditCursor++){
                         int dx=auditCursor%width-radius,dz=auditCursor/width-radius;
                         if(dx*dx+dz*dz>radius*radius)continue;
@@ -254,7 +263,7 @@ public final class LodClientBenchmark {
                         var stamp=coverage.column(x,z,mc.level.getMinSection(),mc.level.getMaxSection());auditedLevels[stamp.level()]++;
                         if(stamp.level()>((dev.voxydistant.config.DistanceBands)LodMetrics.field(session,"bands")).select(x,z,mc.player.chunkPosition().x,mc.player.chunkPosition().z)){
                             auditedInsufficient++;long p=net.minecraft.world.level.ChunkPos.asLong(x,z);
-                            System.out.println("DISTANT_AUDIT_INSUFFICIENT x="+x+" z="+z+" stamp="+stamp+" loaded="+((Set<?>)LodMetrics.field(session,"loadedFull")).contains(p)+" version="+((Map<?,?>)LodMetrics.field(session,"versions")).get(p));
+                            System.out.println("DISTANT_AUDIT_INSUFFICIENT x="+x+" z="+z+" stamp="+stamp+" loaded="+((Set<?>)LodMetrics.field(session,"loadedFull")).contains(p)+" version="+((Map<?,?>)LodMetrics.field(session,"versions")).get(p)+" capture="+((Map<?,?>)LodMetrics.field(session,"captures")).get(p)+" light="+lightReady.contains(p)+" actual="+(mc.level.getChunkSource().getChunk(x,z,net.minecraft.world.level.chunk.ChunkStatus.FULL,false)!=null));
                         }
                         if(stamp.level()==5)System.out.println("DISTANT_AUDIT_MISSING x="+x+" z="+z+" full_retry="+fullRetry+" queue="+queue+" active="+active);
                     }

@@ -383,7 +383,9 @@ public final class RemoteClient {
             Long p=s.discovery.poll();if(p==null)break;
             if(s.pending.containsKey(p)||s.retries.scheduled(p)||s.checked.getOrDefault(p,5)<=desired(s,p))continue;
             Integer blocked=s.budgetInsufficient.get(p);if(blocked!=null&&desired(s,p)<=blocked)continue;
-            if(s.loadedFull.contains(p))continue;
+            // Late vanilla packets can leave this hint set after the chunk moved out of view.
+            // Let main-thread capture verify it before suppressing a discovered remote gap.
+            if(s.loadedFull.contains(p)){s.fullRetry.add(p);continue;}
             if(s.pending.size()+positions.size()>=window){var cancel=preempt(s,p,positions);if(cancel==null){s.invalid.add(p);break;}cancels.add(cancel);}
             positions.add(p);
         }
