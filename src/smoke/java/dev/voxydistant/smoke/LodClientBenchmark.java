@@ -50,7 +50,7 @@ public final class LodClientBenchmark {
         importSamples=new PrintWriter(Files.newBufferedWriter(LodBenchmark.OUTPUT.resolve("voxy-import.csv")));
         importSamples.println("epoch_ms,time_ns,running,completed,total,estimated,backlog,service_jobs,saving_jobs,native_buffer_bytes");
         frames=new PrintWriter(Files.newBufferedWriter(LodBenchmark.OUTPUT.resolve("frames.csv")));
-        frames.println("time_ns,frame_ns,in_world");
+        frames.println("time_ns,frame_ns,in_world,render_ns");
         samples=new PrintWriter(Files.newBufferedWriter(LodBenchmark.OUTPUT.resolve("client-samples.csv")));
         samples.println("time_ns,incoming_tcp_payload,outgoing_tcp_payload,heap_bytes,process_cpu_ns,applied,received,memory,pending,queue,active,scanning,invalid,mesh_queue,geometry_bytes,geometry_sections,receive_limit,snapshot_limit,advertised_credit,full_retry,retries,status");
         threads=new PrintWriter(Files.newBufferedWriter(LodBenchmark.OUTPUT.resolve("threads.csv")));
@@ -59,11 +59,12 @@ public final class LodClientBenchmark {
         MinecraftForge.EVENT_BUS.addListener(this::tick);
         Runtime.getRuntime().addShutdownHook(new Thread(()->{frames.close();samples.close();threads.close();importSamples.close();}));
     }
+    private long renderStart;
     private void frame(TickEvent.RenderTickEvent e) {
-        if(e.phase!=TickEvent.Phase.END)return;
+        if(e.phase==TickEvent.Phase.START){renderStart=System.nanoTime();return;}
         if(holdLocalPause&&!(Minecraft.getInstance().screen instanceof net.minecraft.client.gui.screens.PauseScreen))Minecraft.getInstance().setScreen(new net.minecraft.client.gui.screens.PauseScreen(true));
         if(recordingFailure!=null)throw recordingFailure;
-        long now=System.nanoTime();if(lastFrame!=0)frames.printf(Locale.ROOT,"%d,%d,%s%n",now,now-lastFrame,Minecraft.getInstance().level!=null);lastFrame=now;
+        long now=System.nanoTime();if(lastFrame!=0)frames.printf(Locale.ROOT,"%d,%d,%s,%d%n",now,now-lastFrame,Minecraft.getInstance().level!=null,now-renderStart);lastFrame=now;
         if(capture==null&&recording&&!recordingPending&&now-lastRecordedFrame>=200_000_000L){
             lastRecordedFrame=now;recordingPending=true;capture=new JsonObject();
             capture.addProperty("id",String.format(Locale.ROOT,"record-%06d",recordedFrames++));
@@ -95,6 +96,7 @@ public final class LodClientBenchmark {
         state.addProperty("overlay",mc.getOverlay()==null?"":mc.getOverlay().getClass().getSimpleName());
         state.addProperty("ready",mc.screen instanceof TitleScreen&&mc.getOverlay()==null);
         state.addProperty("in_world",mc.level!=null&&mc.player!=null);
+        state.addProperty("vsync",mc.options.enableVsync().get());state.addProperty("max_fps",mc.getWindow().getFramerateLimit());
         state.addProperty("lod_hello",RemoteClient.greeting()!=null);
         if(RemoteClient.greeting()!=null){state.addProperty("hello_radius",RemoteClient.greeting().radius());state.add("hello_bands",json.toJsonTree(RemoteClient.greeting().bands()));}
         state.addProperty("status",RemoteClient.status());
@@ -196,7 +198,7 @@ public final class LodClientBenchmark {
                         else if(command.equals("receive-disable")){DistantConfig.RECEIVE.set(false);}
                         else if(command.equals("auto-ingest")){me.cortex.voxy.client.config.VoxyConfig.CONFIG.ingestEnabled=request.get("enabled").getAsBoolean();}
                         else if(command.equals("prediction-toggle")){DistantConfig.MOVEMENT_PREDICTION.set(request.get("enabled").getAsBoolean());}
-                        else if(command.equals("cpu-view")){mc.options.pauseOnLostFocus=false;mc.options.enableVsync().set(false);mc.getWindow().updateVsync(false);mc.options.framerateLimit().set(260);mc.setScreen(null);mc.player.setYRot(0);mc.player.setXRot(15);}
+                        else if(command.equals("cpu-view")){mc.options.pauseOnLostFocus=false;mc.options.enableVsync().set(false);mc.getWindow().updateVsync(false);mc.options.framerateLimit().set(260);mc.getWindow().setFramerateLimit(260);mc.setScreen(null);mc.player.setYRot(0);mc.player.setXRot(15);}
                         else if(command.equals("disconnect")){if(mc.level==null)throw new IllegalStateException("Not in a world");mc.level.disconnect();mc.clearLevel();mc.setScreen(new TitleScreen());}
                         else if(command.equals("quit")){mc.stop();}
                         else if(command.equals("reload")){DistantConfig.reload();}

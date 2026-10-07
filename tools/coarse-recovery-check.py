@@ -17,12 +17,13 @@ import uuid
 
 root = Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser()
-parser.add_argument('--mode', choices=['request', 'travel', 'extreme'], required=True)
+parser.add_argument('--mode', choices=['request', 'travel', 'extreme', 'performance'], required=True)
 parser.add_argument('--variant', default='fixed')
 parser.add_argument('--speed', type=float, default=320)
 parser.add_argument('--generate-missing', action='store_true')
 parser.add_argument('--uncached-target', type=int, default=128)
 parser.add_argument('--debug', action='store_true')
+parser.add_argument('--launch-build', type=Path, help='Use an isolated revision build for the A/B performance comparison')
 args = parser.parse_args()
 run = root / 'build/coarse-recovery-travel'
 run.mkdir(exist_ok=True)
@@ -51,7 +52,7 @@ submissionsPerSecond = 8192
 snapshotMillisPerTick = 2.0
 conversionDutyCycle = 1.0
 ''', encoding='utf-8')
-if args.generate_missing:
+if args.generate_missing or args.mode=='performance':
     path=server_home/'config/voxy_distant.toml'
     path.write_text(path.read_text(encoding='utf-8').replace('generateMissingChunks = false','generateMissingChunks = true'),encoding='utf-8')
 (client_home / 'config/voxy_distant.toml').write_text('''[client]
@@ -76,7 +77,7 @@ if args.variant.endswith('-cold'):
     assert disposable_cache.is_relative_to((root / 'build/coarse-recovery-travel').resolve())
     if disposable_cache.exists():
         shutil.rmtree(disposable_cache)
-(client_home / 'options.txt').write_text('lang:zh_cn\nguiScale:2\nmaxFps:120\nrenderDistance:10\npauseOnLostFocus:false\ntutorialStep:none\n', encoding='utf-8')
+(client_home / 'options.txt').write_text('lang:zh_cn\nguiScale:2\nmaxFps:120\nrenderDistance:10\npauseOnLostFocus:false\ntutorialStep:none\nenableVsync:false\n', encoding='utf-8')
 out = (run / args.variant).resolve()
 assert out.is_relative_to(run.resolve())
 out.mkdir(exist_ok=False)
@@ -85,7 +86,9 @@ logs = []
 report = {'mode': args.mode, 'variant': args.variant}
 
 def launch(kind, home):
-    spec = json.loads((base / f'{kind}-launch.json').read_text(encoding='utf-8'))
+    spec_dir = args.launch_build.resolve() if args.launch_build else base
+    spec_name = 'smoke' if args.launch_build and kind == 'server' else kind
+    spec = json.loads((spec_dir / f'{spec_name}-launch.json').read_text(encoding='utf-8'))
     folders = spec['mod_classes'].split(';distant_smoke')[0]
     jargs = [a for a in spec['args'] if not a.startswith(('-Dfml.modFolders=', '-Xmx', '-Xms'))]
     folders += f';distant_smoke%%{root / "build/classes/java/smoke"};distant_smoke%%{root / "build/resources/smoke"}'
@@ -182,6 +185,37 @@ def teleport(cx,cz):
     command('move-camera',x=cx*16,z=cz*16)
     wait(lambda:state().get('x')==cx*16 and state().get('z')==cz*16)
 
+def performance_mark():
+    with (out/'server/server-samples.csv').open(encoding='utf-8') as file:
+        server_sample=list(csv.DictReader(file))[-1]
+    return {'client':state()['nano_time'],'server':int(server_sample['time_ns'])}
+
+def performance_record(label,start):
+    end=performance_mark()
+    report.setdefault('windows',{})[label]={'start':start,'end':end}
+    print(json.dumps({'variant':args.variant,'phase':label,'seconds':(end['client']-start['client'])/1e9}),flush=True)
+    (out/'result.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8')
+
+def performance_settle():
+    stable=0
+    def idle():
+        nonlocal stable
+        last=sample()
+        clear=all(int(last[key])==0 for key in ('pending','queue','active','mesh_queue','full_retry'))
+        stable=stable+1 if clear and int(last['geometry_sections'])>0 else 0
+        return stable>=15
+    wait(idle,240)
+
+def performance_audit(label):
+    deadline=time.monotonic()+30
+    while True:
+        (out/'client/coverage.json').unlink(missing_ok=True)
+        command('audit')
+        wait(lambda:(out/'client/coverage.json').exists())
+        report[label]=json.loads((out/'client/coverage.json').read_text(encoding='utf-8'))
+        if report[label]['insufficient']==0 or time.monotonic()>=deadline:return
+        time.sleep(5)
+
 with socket.socket() as probe:
     probe.bind(('127.0.0.1', 25576))
 client = None
@@ -189,7 +223,10 @@ server = launch('server', server_home)
 try:
     wait(lambda: 'Done (' in (out / 'server/console.log').read_text(encoding='utf-8'), 150)
     time.sleep(5)
-    if args.mode in ('travel','extreme'):
+    if args.mode == 'performance':
+        server_command('gamerule randomTickSpeed 0\ngamerule doMobSpawning false\nkill @e[type=!player]\ntime set noon\ngamerule doDaylightCycle false\nweather clear\ngamerule doWeatherCycle false')
+        time.sleep(15)
+    if args.mode in ('travel','extreme','performance'):
         if not (run/'import-complete').exists():
             server_command('voxydistant import')
             wait(lambda: 'import 维护任务已结束' in (out / 'server/console.log').read_text(encoding='utf-8'), 240)
@@ -200,8 +237,42 @@ try:
     wait(lambda: state().get('in_world') and state().get('lod_hello'))
     server_command('gamemode spectator LodBench\ntime set noon\ngamerule doDaylightCycle false\nweather clear\ngamerule doWeatherCycle false\ngamerule randomTickSpeed 0\ngamerule doMobSpawning false\ntp LodBench 0 180 0')
     time.sleep(3)
+    if args.mode=='performance':
+        command('cpu-view')
+        time.sleep(10)
+        receive_start=performance_mark()
     command('receive')
-    if args.mode == 'request':
+    if args.mode=='performance':
+        performance_settle()
+        performance_record('cold_receive',receive_start)
+        performance_audit('cold_coverage')
+        # Keep radius 24 inside the 64 x 64 saved corpus while crossing chunks repeatedly.
+        time.sleep(10)
+        start=performance_mark()
+        command('cruise',waypoints=[[7,0],[-7,0],[0,0]]*14,speed=160)
+        wait(lambda:state().get('cruise_done') is False)
+        wait(lambda:state().get('cruise_done'),180)
+        performance_record('first_travel',start)
+        performance_settle()
+        performance_audit('first_travel_coverage')
+        time.sleep(15)
+        start=performance_mark();time.sleep(45);performance_record('stationary',start)
+        start=performance_mark()
+        command('cruise',waypoints=[[7,0],[-7,0],[0,0]]*20,speed=160)
+        wait(lambda:state().get('cruise_done') is False)
+        wait(lambda:state().get('cruise_done'),180)
+        performance_record('hot_travel',start)
+        performance_settle()
+        performance_audit('hot_coverage')
+        report['coverage_complete']=all(report[key]['insufficient']==0 for key in ('cold_coverage','first_travel_coverage','hot_coverage'))
+        report['sample']=sample()
+        report['auto_ingest']=state()['auto_ingest']
+        assert report['auto_ingest'] is False
+        with (out/'server/player-positions.csv').open(encoding='utf-8') as file:
+            positions=list(csv.DictReader(file))
+        assert min(float(row['x']) for row in positions)<-80 and max(float(row['x']) for row in positions)>80
+        report['server_x_bounds']=[min(float(row['x']) for row in positions),max(float(row['x']) for row in positions)]
+    elif args.mode == 'request':
         command('receive-disable')
         time.sleep(1)
         report['request_check'] = command('request-check')
@@ -273,7 +344,7 @@ try:
             wait(lambda: (out/'client/coverage.json').exists())
             report['toggle_coverage'] = json.loads((out/'client/coverage.json').read_text(encoding='utf-8'))
             assert report['toggle_coverage']['insufficient'] == 0, report
-    if args.mode=='extreme':
+    if args.mode in ('extreme','performance'):
         console=(out/'client/console.log').read_text(encoding='utf-8')
         assert 'Critical error occurred in async processor' not in console
         assert 'Voxy Distant receive failed' not in console
