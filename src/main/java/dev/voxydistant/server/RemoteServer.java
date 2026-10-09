@@ -244,6 +244,7 @@ public final class RemoteServer {
         var bus=MinecraftForge.EVENT_BUS;
         bus.addListener(RemoteServer::start); bus.addListener(RemoteServer::tickEvent); bus.addListener(RemoteServer::stop);
         bus.addListener(RemoteServer::join); bus.addListener(RemoteServer::leave); bus.addListener(RemoteServer::dimension);
+        bus.addListener(RemoteServer::respawn);
         bus.addListener(RemoteServer::chunkLoaded); bus.addListener(RemoteServer::commands);
     }
     private RemoteServer(MinecraftServer server) {
@@ -273,6 +274,9 @@ public final class RemoteServer {
     private static void join(PlayerEvent.PlayerLoggedInEvent e) { if (instance!=null && e.getEntity() instanceof ServerPlayer p) instance.addPlayer(p); }
     private static void leave(PlayerEvent.PlayerLoggedOutEvent e) { if (instance!=null) instance.removePlayer(e.getEntity().getUUID()); }
     private static void dimension(PlayerEvent.PlayerChangedDimensionEvent e) {
+        if (instance!=null && e.getEntity() instanceof ServerPlayer p) { instance.removePlayer(p.getUUID()); instance.addPlayer(p); }
+    }
+    private static void respawn(PlayerEvent.PlayerRespawnEvent e) {
         if (instance!=null && e.getEntity() instanceof ServerPlayer p) { instance.removePlayer(p.getUUID()); instance.addPlayer(p); }
     }
     private static void chunkLoaded(ChunkEvent.Load e) {

@@ -22,6 +22,7 @@ public final class ClientEvents {
         bus.addListener(ClientEvents::serverStopping);
         bus.addListener(ClientEvents::screen);
         bus.addListener(ClientEvents::unload);
+        bus.addListener((net.minecraftforge.client.event.ClientPlayerNetworkEvent.Clone event)->RemoteClient.close());
         bus.addListener(CacheIndexRebuild::commands);
     }
     private static void clientTick(TickEvent.ClientTickEvent event) {

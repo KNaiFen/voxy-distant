@@ -98,6 +98,9 @@ public final class LodClientBenchmark {
         state.addProperty("in_world",mc.level!=null&&mc.player!=null);
         state.addProperty("vsync",mc.options.enableVsync().get());state.addProperty("max_fps",mc.getWindow().getFramerateLimit());
         state.addProperty("lod_hello",RemoteClient.greeting()!=null);
+        if(mc.level!=null)state.addProperty("dimension",mc.level.dimension().location().toString());
+        if(RemoteClient.greeting()!=null)state.addProperty("hello_dimension",RemoteClient.greeting().dimension());
+        if(mc.player!=null)state.addProperty("dead",mc.player.isDeadOrDying());
         if(RemoteClient.greeting()!=null){state.addProperty("hello_radius",RemoteClient.greeting().radius());state.add("hello_bands",json.toJsonTree(RemoteClient.greeting().bands()));}
         state.addProperty("status",RemoteClient.status());
         state.addProperty("receive_memory_mib",DistantConfig.RECEIVE_MIB.get());
@@ -196,6 +199,7 @@ public final class LodClientBenchmark {
                         }
                         else if(command.equals("receive")){if(mc.level==null||RemoteClient.greeting()==null)throw new IllegalStateException("World or LOD handshake not ready");if(Boolean.getBoolean("voxyDistant.fixedCamera")){mc.options.pauseOnLostFocus=false;mc.setScreen(null);}recording=Boolean.getBoolean("voxyDistant.recordProcess");DistantConfig.RECEIVE.set(true);}
                         else if(command.equals("receive-disable")){DistantConfig.RECEIVE.set(false);}
+                        else if(command.equals("respawn")){mc.player.respawn();}
                         else if(command.equals("auto-ingest")){me.cortex.voxy.client.config.VoxyConfig.CONFIG.ingestEnabled=request.get("enabled").getAsBoolean();}
                         else if(command.equals("prediction-toggle")){DistantConfig.MOVEMENT_PREDICTION.set(request.get("enabled").getAsBoolean());}
                         else if(command.equals("cpu-view")){mc.options.pauseOnLostFocus=false;mc.options.enableVsync().set(false);mc.getWindow().updateVsync(false);mc.options.framerateLimit().set(260);mc.getWindow().setFramerateLimit(260);mc.setScreen(null);mc.player.setYRot(0);mc.player.setXRot(15);}

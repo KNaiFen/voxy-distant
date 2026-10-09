@@ -18,10 +18,11 @@ root = Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser()
 parser.add_argument('--diagnostics', action='store_true', help='Enable production diagnostics and verify transfer/database log events')
 parser.add_argument('--hotspots', action='store_true', help='Measure production chooser/cancellation with synthetic queues')
+parser.add_argument('--respawn', action='store_true', help='Check same-dimension and cross-dimension player respawn')
 parser.add_argument('--config-language', choices=['zh_cn', 'en_us'], default='zh_cn', help='Verify upgraded config comments in this language')
 options = parser.parse_args()
-run = root / 'build' / f'integration-{time.time_ns()}'
-run.mkdir()
+run = root / 'build' / ('integration-respawn' if options.respawn else f'integration-{time.time_ns()}')
+run.mkdir(exist_ok=options.respawn)
 shutil.copyfile(root / 'run/eula.txt', run / 'eula.txt')
 (run / 'server.properties').write_text(
     'server-ip=127.0.0.1\nserver-port=0\nview-distance=2\nsimulation-distance=2\n', encoding='utf-8')
@@ -36,6 +37,8 @@ args.insert(1, '-Dfml.modFolders=' + env['MOD_CLASSES'])
 args.insert(1, '-Dfile.encoding=UTF-8')
 if options.hotspots:
     args.insert(1, '-DvoxyDistant.serverHotspotCheck=true')
+if options.respawn:
+    args.insert(1, '-DvoxyDistant.respawnCheck=true')
 process = subprocess.Popen(args, cwd=run, env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                            stderr=subprocess.STDOUT, text=True, encoding='utf-8', errors='replace')
 lines = queue.Queue()
@@ -58,10 +61,12 @@ with (root / 'logs/integration-check.log').open('w', encoding='utf-8') as log:
         if line:
             log.write(line)
             log.flush()
-            if 'DISTANT_SMOKE_' in line or 'DISTANT_MAINTENANCE_' in line or 'SERVER_HOTSPOT' in line or 'Exception' in line or 'Error' in line:
+            if 'DISTANT_SMOKE_' in line or 'DISTANT_MAINTENANCE_' in line or 'DISTANT_RESPAWN_' in line or 'SERVER_HOTSPOT' in line or 'Exception' in line or 'Error' in line:
                 print(line, end='')
             passed |= 'DISTANT_SMOKE_PASS' in line
             if options.hotspots and 'DISTANT_SERVER_HOTSPOT_PASS' in line:
+                passed = maintenance_stopped = True
+            if options.respawn and 'DISTANT_RESPAWN_PASS' in line:
                 passed = maintenance_stopped = True
             maintenance_stopped |= 'DISTANT_MAINTENANCE_STOP_PASS' in line
         if time.monotonic() > deadline:

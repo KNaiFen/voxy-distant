@@ -93,6 +93,7 @@ public final class ServerSmoke {
             while(!receipts.isEmpty())receipts.remove().run();
             if(++ticks>2400)throw new AssertionError("server integration timed out: "+RemoteServer.status());
             Object service=current();if(service==null||field(service,"world")==null)return;
+            if(Boolean.getBoolean("voxyDistant.respawnCheck")){RespawnCheck.run(server,service);stage=3;server.halt(false);server=null;return;}
             for(Peer p:peers)if(p.retry){p.retry=false;RemoteServer.requests(p.player,new Protocol.Requests(1,96,2,0,32<<20,List.of(new Protocol.Want(40,40,0,5))));}
             if(ticks%200==0)System.out.println("DISTANT_SMOKE_PROGRESS stage="+stage+" "+RemoteServer.status());
             if(stage==0){
