@@ -105,6 +105,6 @@ python tools/lod-live-benchmark.py --profiles default --rounds 1 --rate custom -
 python tools/lod-live-benchmark.py --profiles default --rounds 1 --rate custom --radius 256 --cold-client --acceptance --player-concurrency 16 --server-requests-per-tick 1024 --capture-interval 60 --tag cold256-tuning
 ```
 
-本地根目录 `build/benchmarks/lod-square256-cache128/live/`；有效运行标签：`cold256-v023-baseline`、`cold256-skipdecode`、`cold256-batchnodes`、`cold256-batchlock`、`cold256-clean-before2`、`cold256-clean-after2`、`cold256-tuned`。每轮有 `run.json`、`source.patch`、`build-hashes.json`、`receive-start.json`、`acceptance.json`、`measurement.json`、双端 samples / operations、client frames / transport / coverage、exits、screenshots；diag 轮另有双端 `pipeline.jfr`、`jfr-hotspots.csv`。
+原始运行位于 `build/benchmarks/lod-square256-cache128/live/`；有效运行标签为 `cold256-v023-baseline`、`cold256-skipdecode`、`cold256-batchnodes`、`cold256-batchlock`、`cold256-clean-before2`、`cold256-clean-after2`、`cold256-tuned`。2026-10-09 清理后，七轮的 `measurement.json`、运行配置、生产类哈希、源码差异、接收起点和验收/退出结果集中保留在 `build/cold-client-transfer-evidence/<运行标签>/`，另保留最终无诊断对照的新旧各一张截图，共 3,286,357 字节（约 3.13 MiB），用于核对本文和首页数据；被新复测替代或核对用途结束后删除。复制前后 SHA-256 一致。
 
-对照原类目录 `build/cold256-before-source/` / `build/cold256-before-classes/`，恢复的最终类快照 `build/cold256-final-classes/`。性能产物和临时 JFR 分析 / JVM 诊断脚本仅在 build，不纳入 Git。报告中的数值只来自明确列出的运行，不混用 README 旧数据。
+已删除完整原始采样、JFR、重复截图和旧运行目录，以及 `build/cold256-before-source/`、`build/cold256-before-classes/`、`build/cold256-final-classes/` 等一次性对照构建与分析脚本。本文数值仍来自上述历史运行，没有重新测量或修改；精简后的证据可核对结果，不能重新分析已经删除的完整逐帧采样。唯一预生成测试基线继续保留，当前产物管理见[开发指南](../development.md)。
