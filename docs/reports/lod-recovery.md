@@ -1,5 +1,7 @@
 # 高速移动后粗 LOD 不恢复：查证与回归
 
+历史验证：2026-10-07，0.2.26 / `dd21d22`。修复已包含在当前源码；后续节点与版本问题见[极端移动报告](extreme-lod-recovery.md)，当前使用说明见[使用指南](../usage.md)。
+
 ## 结论与范围
 
 基线为 `7bbfa2e`，修复版本为 `0.2.26-forge-1.20.1`。已确认并修复客户端接收调度、缓存失效同步和请求范围计算中的问题。服务端处理或网络传输滞后可以触发迟到的粗回复，但不足以解释停下以后长期不恢复；客户端原有状态管理确实会丢失刷新需求。
@@ -8,7 +10,7 @@
 
 ## 用户实例的只读证据
 
-实例为 `E:\Downloads\MC\DeceasedCraft_CB_5.11.18\.minecraft\versions\DeceasedCraft_CB5.11.18`，安装 Voxy-distant 0.2.24 与 Voxy 0.2.15-beta。VD 接收开启，Voxy `ingest_enabled=false`，原版渲染距离 10，VD 半径 384、请求窗口 512、接收与索引预算各 512 MiB、处理占空比 0.9。
+只读检查的实例为 DeceasedCraft CB 5.11.18，安装 Voxy-distant 0.2.24 与 Voxy 0.2.15-beta。VD 接收开启，Voxy `ingest_enabled=false`，原版渲染距离 10，VD 半径 384、请求窗口 512、接收与索引预算各 512 MiB、处理占空比 0.9。
 
 检查约 66.3 MB 的 `latest.log`，没有发现 `Voxy Distant receive failed` 或异步节点处理线程崩溃。日志包含大量 `Chunk not in map` 与子节点掩码为零的警告；这些警告不能单独证明缓存损坏。日志缺少详细 VD 传输记录，无法从这份日志确定用户现场具体是哪一种时序。
 

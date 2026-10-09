@@ -17,7 +17,7 @@ server_home, client_home = run / 'server', run / 'client'
 server_home.mkdir(parents=True, exist_ok=True)
 if not client_home.exists():
     shutil.copytree(root / 'build/benchmarks/lod-square256-cache128/client', client_home)
-shutil.copyfile(root / 'run/eula.txt', server_home / 'eula.txt')
+shutil.copyfile(root / '.run/eula.txt', server_home / 'eula.txt')
 (server_home / 'server.properties').write_text('server-ip=127.0.0.1\nserver-port=25576\nonline-mode=false\nview-distance=2\nsimulation-distance=2\nlevel-type=minecraft:flat\n', encoding='utf-8')
 (server_home / 'config').mkdir(exist_ok=True)
 (server_home / 'config/voxy_distant.toml').write_text('[server]\nradius=8\ngenerateMissingChunks=true\n[debug]\nenabled=true\nverbose=true\nintervalSeconds=2\n', encoding='utf-8')

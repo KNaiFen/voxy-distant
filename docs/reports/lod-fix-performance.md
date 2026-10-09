@@ -1,5 +1,7 @@
 # 0.2.27 节点及缓存版本修复：基线性能对照
 
+历史验证：2026-10-07。仅覆盖下述两个提交，不包含 2026-10-09 的游玩生命周期修复；当前代码状态见[文档索引](../README.md)。
+
 ## 结论
 
 比较 0.2.26（`dd21d22`）与 0.2.27（`69c9883`），客户端正常静止、空缓存接收及 160 方块/秒往返没有测到明显的持续渲染退化。高速阶段平均渲染调用耗时差异不到 1%，整帧 P99 差异不到 0.04 ms。节点线程仍只消耗约 0.0055 个逻辑核。
@@ -58,12 +60,12 @@
 mkdir -p build/lod-performance-baseline
 git archive dd21d22 build.gradle gradle.properties settings.gradle gradlew gradlew.bat gradle src | tar -x -C build/lod-performance-baseline
 cd build/lod-performance-baseline
-./gradlew --no-daemon classes writeClientLaunch writeSmokeLaunch -PlodClient -PvoxyJar=E:/Downloads/Code/voxy-distant/.materials/voxy-compat-build/versions/1.20.1-forge/build/devlibs/voxy-0.2.15-beta+1.20.1-legacyforge.jar
+./gradlew --no-daemon classes writeClientLaunch writeSmokeLaunch -PlodClient -PvoxyJar=/绝对路径/voxy-0.2.15-beta+1.20.1-legacyforge.jar
 cd ../..
 python tools/lod-performance-compare.py --baseline-build build/lod-performance-baseline/build
 ```
 
-先按 `docs/coarse-lod-recovery-2026-10-07.md` 的输入方式准备 `build/coarse-recovery-input`。比较脚本运行两边原始生产 class/resources 和同一份当前 smoke 监测代码；launch 参数分别引用各自 Gradle classpath，避免混用版本。每轮输出摘要后立即删除本轮游戏/缓存/完整日志，失败则保留单轮现场供定位。
+先按[开发指南](../development.md)准备 `build/coarse-recovery-input`。比较脚本运行两边原始生产 class/resources 和同一份当前 smoke 监测代码；launch 参数分别引用各自 Gradle classpath，避免混用版本。每轮输出摘要后立即删除本轮游戏/缓存/完整日志，失败则保留单轮现场供定位。
 
 消融审查保留实际需要的渲染调用计时、实际窗口限帧状态与显式窗口上限设置、四阶段路线和对照摘要；没有修改生产渲染算法。覆盖结果单独记录，即使旧版有缺口也保留实测开销，新版必须完整才能作为通过结果。预试修正了测试脚本读取旧 `cruise_done` 的完成竞态；被丢弃的预试不混入正式统计。当前 smoke 代码编译通过，新增脚本语法检查通过，`--mode request --launch-build build` 的真实接收流程回归通过，两 JVM 正常退出。
 

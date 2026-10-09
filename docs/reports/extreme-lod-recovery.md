@@ -1,5 +1,7 @@
 # 空缓存高速移动与瞬移：节点故障复现、修复和验证
 
+历史验证：2026-10-07，0.2.27 / `69c9883`。本文的安装包与统计对应该提交；此后游玩生命周期修复见[最新回归报告](gameplay-lifecycle.md)。
+
 ## 结果与适用范围
 
 基线提交 `dd21d22`（0.2.26），修复版本 `0.2.27-forge-1.20.1`。在真实 Forge 客户端与专用服务端上构造了空客户端缓存、热服务端缓存、下载中高速往返、连续瞬移、未缓存区域和渲染器重建场景。查出了三处持久状态错误，并完成修复及回归。
@@ -54,7 +56,7 @@
 
 ## 重跑方法与交付
 
-输入和 launch spec 的准备方式沿用 `docs/coarse-lod-recovery-2026-10-07.md`；复用已有 `build/benchmarks/lod-square256-cache128` 基线，按需重建小输入，不复制整套基线。普通服务端烟测会修改开发 classpath，重跑客户端前需生成带 `-PlodClient` 的启动参数。
+输入和 launch spec 的准备方式见[开发指南](../development.md)；复用已有 `build/benchmarks/lod-square256-cache128` 基线，按需重建小输入，不复制整套基线。普通服务端烟测会修改开发 classpath，重跑客户端前需生成带 `-PlodClient` 的启动参数。
 
 ```sh
 ./gradlew --no-daemon smokeClasses writeClientLaunch writeSmokeLaunch -PlodClient

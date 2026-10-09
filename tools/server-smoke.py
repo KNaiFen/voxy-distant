@@ -1,7 +1,7 @@
 """Run the isolated dedicated integration harness using a prepared Gradle launch.
 
 Requires build/smoke-launch.json with args and mod_classes from prepareServerRun.
-The accepted EULA is copied from run/eula.txt; this script never changes consent.
+The accepted EULA is copied from .run/eula.txt; this script never changes consent.
 """
 import json
 import argparse
@@ -23,7 +23,7 @@ parser.add_argument('--config-language', choices=['zh_cn', 'en_us'], default='zh
 options = parser.parse_args()
 run = root / 'build' / ('integration-respawn' if options.respawn else f'integration-{time.time_ns()}')
 run.mkdir(exist_ok=options.respawn)
-shutil.copyfile(root / 'run/eula.txt', run / 'eula.txt')
+shutil.copyfile(root / '.run/eula.txt', run / 'eula.txt')
 (run / 'server.properties').write_text(
     'server-ip=127.0.0.1\nserver-port=0\nview-distance=2\nsimulation-distance=2\n', encoding='utf-8')
 if options.diagnostics:
@@ -51,8 +51,8 @@ threading.Thread(target=read, daemon=True).start()
 passed = False
 maintenance_stopped = False
 deadline = time.monotonic() + 300
-(root / 'logs').mkdir(exist_ok=True)
-with (root / 'logs/integration-check.log').open('w', encoding='utf-8') as log:
+(root / '.logs').mkdir(exist_ok=True)
+with (root / '.logs/integration-check.log').open('w', encoding='utf-8') as log:
     while process.poll() is None:
         try:
             line = lines.get(timeout=1)
@@ -84,7 +84,7 @@ with (root / 'logs/integration-check.log').open('w', encoding='utf-8') as log:
         maintenance_stopped |= 'DISTANT_MAINTENANCE_STOP_PASS' in line
 print('INTEGRATION_PASS', passed and maintenance_stopped, 'EXIT', result)
 if options.diagnostics and not options.hotspots:
-    content = (root / 'logs/integration-check.log').read_text(encoding='utf-8')
+    content = (root / '.logs/integration-check.log').read_text(encoding='utf-8')
     required = ['SERVER cache ', 'SERVER send_begin ', 'SERVER submitted ', 'SERVER receipt ',
                 'SERVER player_interval ', 'SERVER encoded ', 'DATABASE interval ',
                 'SERVER_BATCH_ENCODE ', 'SERVER throttle ', 'SERVER waits ', 'SERVER work_wait ']
