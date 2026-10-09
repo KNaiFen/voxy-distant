@@ -8,7 +8,7 @@ import java.util.function.BiPredicate;
 /** Server-thread owned incremental local generation footprint. */
 final class LocalDiscovery {
     private static final class Region {
-        final int x,z;BitSet active=new BitSet(1024),todo=new BitSet(1024),candidates=new BitSet(1024);boolean update=true;long preparedAt;
+        final int x,z;BitSet active=new BitSet(1024),todo=new BitSet(1024),candidates=new BitSet(1024),full;boolean update=true;long preparedAt;
         Region(int x,int z){this.x=x;this.z=z;}
     }
     private final Map<Long,Region> regions=new LinkedHashMap<>();
@@ -30,7 +30,13 @@ final class LocalDiscovery {
     private static int rxFor(long key){return ChunkPos.getX(key);}
     private static int rzFor(long key){return ChunkPos.getZ(key);}
     boolean contains(int x,int z){return shape!=null&&shape.contains(x,z)&&Math.max(Math.abs((long)x-shape.playerX()),Math.abs((long)z-shape.playerZ()))>view;}
-    void step(int budget,int capacity,BiPredicate<Integer,Integer> missing){
+    void coverage(int rx,int rz,dev.voxydistant.compat.CoverageStore.Directory directory){
+        var region=regions.get(key(rx,rz));if(region==null)return;
+        region.full=new BitSet(1024);
+        for(int i=0;i<1024;i++)if(directory.levels[i]==0)region.full.set(i);
+        region.todo.andNot(region.full);region.candidates.andNot(region.full);
+    }
+    void step(int budget,int capacity,BiPredicate<Integer,Integer> prepare,BiPredicate<Integer,Integer> missing){
         long deadline=System.nanoTime()+2_000_000L;int count=candidateCount();
         var ordered=new ArrayList<>(regions.values());ordered.sort(Comparator.comparingLong((Region r)->r.preparedAt).thenComparingDouble(r->shape.minimumScore(r.x*32,r.z*32,r.x*32+31,r.z*32+31)));
         for(var region:ordered){
@@ -41,8 +47,13 @@ final class LocalDiscovery {
                 if(relation==1&&outsideVanilla)mask.set(0,1024);
                 else for(int i=0;i<1024;i++){boundaryChecks++;if(contains(x+(i&31),z+(i>>5)))mask.set(i);}
                 var added=(BitSet)mask.clone();added.andNot(region.active);region.todo.and(mask);region.todo.or(added);region.candidates.and(mask);region.active=mask;region.update=false;region.preparedAt=++sequence;
+                // Re-entered columns may have finished generating since the previous directory read.
+                if(!added.isEmpty())region.full=null;
+                if(region.full!=null)region.todo.andNot(region.full);
                 if(System.nanoTime()>=deadline)return;
             }
+            if(region.todo.isEmpty())continue;
+            if(region.full==null&&!prepare.test(region.x,region.z))continue;
             for(int slot=region.todo.nextSetBit(0);slot>=0&&budget>0&&count<capacity;slot=region.todo.nextSetBit(slot+1)){
                 region.todo.clear(slot);budget--;checks++;int x=region.x*32+(slot&31),z=region.z*32+(slot>>5);
                 if(contains(x,z)&&missing.test(x,z)){region.candidates.set(slot);count++;}

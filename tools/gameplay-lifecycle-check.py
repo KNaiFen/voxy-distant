@@ -10,7 +10,7 @@ import uuid
 
 root = Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser()
-parser.add_argument('--case', choices=['respawn','recovery'], required=True)
+parser.add_argument('--case', choices=['respawn','recovery','local-cache'], required=True)
 args = parser.parse_args()
 run = root / 'build/gameplay-lifecycle'
 server_home, client_home = run / 'server', run / 'client'
@@ -71,11 +71,30 @@ def epoch():
     return max(values,default=0)
 
 try:
-    service=launch('server',server_home)
-    wait(lambda:'Done (' in (out/'server/console.log').read_text(encoding='utf-8'))
-    game=launch('client',client_home);wait(lambda:state().get('ready'));client('connect')
-    wait(lambda:state().get('in_world') and state().get('lod_hello'))
-    server('gamerule doMobSpawning false\ngamerule keepInventory true\nspawnpoint LodBench 0 80 0\ngamemode creative LodBench')
+    if args.case=='local-cache':
+        world=client_home/'saves/Lifecycle'
+        if not world.exists():
+            if not (server_home/'world').exists():
+                service=launch('server',server_home)
+                wait(lambda:'Done (' in (out/'server/console.log').read_text(encoding='utf-8'))
+                server('stop');service.wait(timeout=45);processes.remove(service)
+            world.parent.mkdir(exist_ok=True);shutil.copytree(server_home/'world',world)
+        game=launch('client',client_home);wait(lambda:state().get('ready'));client('open-world',world='Lifecycle')
+        wait(lambda:state().get('in_world'));client('local-cache-setup');
+        wait(lambda:state().get('local_reason')=='范围内已完成',180)
+        print('LOCAL_CACHE_FILLED',json.dumps(state(),ensure_ascii=False),flush=True)
+        client('disconnect');wait(lambda:state().get('ready'));client('open-world',world='Lifecycle')
+        wait(lambda:state().get('in_world'));client('local-cache-setup');time.sleep(8)
+        result=state();print('LOCAL_CACHE_REOPENED',json.dumps(result,ensure_ascii=False),flush=True)
+        assert result['local_submitted']==0, 'Persisted local LOD generated again'
+        client('local-cache-check')
+        client('disconnect');wait(lambda:state().get('ready'))
+    else:
+        service=launch('server',server_home)
+        wait(lambda:'Done (' in (out/'server/console.log').read_text(encoding='utf-8'))
+        game=launch('client',client_home);wait(lambda:state().get('ready'));client('connect')
+        wait(lambda:state().get('in_world') and state().get('lod_hello'))
+        server('gamerule doMobSpawning false\ngamerule keepInventory true\nspawnpoint LodBench 0 80 0\ngamemode creative LodBench')
     if args.case=='respawn':
         server('tp LodBench 1024 100 0')
         client('receive');wait(lambda:epoch()>0);before=epoch()
@@ -87,7 +106,7 @@ try:
         before=epoch();server('kill LodBench');wait(lambda:state().get('dead'));client('respawn')
         wait(lambda:state().get('dimension')=='minecraft:overworld' and state().get('hello_dimension')=='minecraft:overworld' and epoch()>before)
         print('LIVE_CROSS_DIMENSION_RESPAWN_PASS',json.dumps(state(),ensure_ascii=False),flush=True)
-    else:
+    elif args.case=='recovery':
         server('tp LodBench 0 100 0\ngamemode spectator LodBench')
         client('receive');wait(lambda:epoch()>0);time.sleep(5)
         before=client('discovery-state');client('rebuild-index')
@@ -104,7 +123,7 @@ try:
 finally:
     for p in reversed(processes):
         if p.poll() is None:
-            if p is processes[0]:p.stdin.write('stop\n');p.stdin.flush()
+            if p is processes[0] and args.case!='local-cache':p.stdin.write('stop\n');p.stdin.flush()
             else:p.terminate()
             try:p.wait(timeout=45)
             except subprocess.TimeoutExpired:p.kill();p.wait()

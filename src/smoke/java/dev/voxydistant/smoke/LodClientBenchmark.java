@@ -222,6 +222,18 @@ public final class LodClientBenchmark {
                         else if(command.equals("cruise")){cruiseRoute=request.getAsJsonArray("waypoints");cruiseSegment=0;cruiseSpeed=request.has("speed")?request.get("speed").getAsDouble():22;}
                         else if(command.equals("prediction-local")){mc.options.pauseOnLostFocus=false;mc.setScreen(null);DistantConfig.RECEIVE.set(false);DistantConfig.ENABLED.set(true);DistantConfig.RADIUS.set(24);}
                         else if(command.equals("local-disable")){holdLocalPause=false;mc.setScreen(null);DistantConfig.ENABLED.set(false);}
+                        else if(command.equals("local-cache-setup")){
+                            mc.options.pauseOnLostFocus=false;mc.setScreen(null);mc.options.renderDistance().set(2);
+                            me.cortex.voxy.client.config.VoxyConfig.CONFIG.ingestEnabled=true;
+                            DistantConfig.ENABLED.set(true);DistantConfig.RADIUS.set(8);
+                            DistantConfig.MOVEMENT_PREDICTION.set(false);
+                            mc.getSingleplayerServer().execute(()->mc.getSingleplayerServer().getPlayerList().setViewDistance(2));
+                        }
+                        else if(command.equals("local-cache-check")){
+                            mc.getSingleplayerServer().submit(()->{try{LocalCacheCheck.run(mc.getSingleplayerServer().overworld());}catch(Exception ex){throw new java.util.concurrent.CompletionException(ex);}}).whenComplete((unused,error)->mc.execute(()->{
+                                try{var details=state();if(error!=null)details.addProperty("error",error.toString());ack(id,error==null?"ok":"error",details);}catch(IOException ex){throw new UncheckedIOException(ex);}
+                            }));
+                        }
                         else if(command.equals("local-pause")){holdLocalPause=true;mc.setScreen(new net.minecraft.client.gui.screens.PauseScreen(true));}
                         else if(command.equals("mask-off")){System.setProperty("voxyDistant.maskBypass","true");}
                         else if(command.equals("mask-on")){System.setProperty("voxyDistant.maskBypass","false");}
@@ -242,7 +254,7 @@ public final class LodClientBenchmark {
                         else if(command.equals("screenshot")){capture=request;}
                         else if(command.startsWith("settings-")){try{SettingsClientCheck.command(request);}catch(ReflectiveOperationException ex){throw new IllegalStateException(ex);}}
                         else throw new IllegalArgumentException("Unknown acceptance command "+command);
-                        if(!command.equals("screenshot")&&!command.equals("request-check")&&!command.equals("discovery-state"))ack(id,"ok",state());
+                        if(!command.equals("screenshot")&&!command.equals("request-check")&&!command.equals("discovery-state")&&!command.equals("local-cache-check"))ack(id,"ok",state());
                     }catch(RuntimeException ex){com.mojang.logging.LogUtils.getLogger().error("Client acceptance command failed: "+id,ex);var details=state();details.addProperty("error",ex.toString());ack(id,"error",details);}
                 }
             }

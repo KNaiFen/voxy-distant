@@ -110,7 +110,8 @@ public final class CoverageStore {
         this.path=path;
         database=openDatabase(path.resolveSibling(path.getFileName()+".rocksdb"));
     }
-    public synchronized void remote(int min,int max,int memoryMiB){if(minY!=min||maxY!=max){directories.clear();for(var p:lru.values())p.directory=null;}minY=min;maxY=max;maxPages=Math.max(8,(int)(memoryMiB*1048576L/400000));remote=true;}
+    public synchronized void height(int min,int max){if(minY!=min||maxY!=max){directories.clear();for(var p:lru.values())p.directory=null;}minY=min;maxY=max;}
+    public synchronized void remote(int min,int max,int memoryMiB){height(min,max);maxPages=Math.max(8,(int)(memoryMiB*1048576L/400000));remote=true;}
     public synchronized void active(int x,int z,int r){centerX=x;centerZ=z;radius=r;}
     public synchronized Usage usage(){return new Usage(lru.size(),maxPages);}
     public boolean pressure(){return pressure;}
