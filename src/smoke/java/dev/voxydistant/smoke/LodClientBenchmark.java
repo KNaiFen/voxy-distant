@@ -200,6 +200,15 @@ public final class LodClientBenchmark {
                         else if(command.equals("receive")){if(mc.level==null||RemoteClient.greeting()==null)throw new IllegalStateException("World or LOD handshake not ready");if(Boolean.getBoolean("voxyDistant.fixedCamera")){mc.options.pauseOnLostFocus=false;mc.setScreen(null);}recording=Boolean.getBoolean("voxyDistant.recordProcess");DistantConfig.RECEIVE.set(true);}
                         else if(command.equals("receive-disable")){DistantConfig.RECEIVE.set(false);}
                         else if(command.equals("respawn")){mc.player.respawn();}
+                        else if(command.equals("rebuild-index")){if(!net.minecraftforge.client.ClientCommandHandler.runCommand("voxydistant rebuildindex"))throw new IllegalStateException("Index command not handled");}
+                        else if(command.equals("discovery-state")){
+                            var currentField=RemoteClient.class.getDeclaredField("session");currentField.setAccessible(true);Object current=currentField.get(null);
+                            ((ThreadPoolExecutor)LodMetrics.field(current,"worker")).execute(()->{
+                                var details=new JsonObject();details.addProperty("regions",((Map<?,?>)LodMetrics.field(LodMetrics.field(current,"discovery"),"regions")).size());
+                                details.addProperty("generation",(int)LodMetrics.field(current,"generation"));details.addProperty("center",(int)LodMetrics.field(current,"x"));
+                                mc.execute(()->{try{ack(id,"ok",details);}catch(IOException ex){throw new UncheckedIOException(ex);}});
+                            });
+                        }
                         else if(command.equals("auto-ingest")){me.cortex.voxy.client.config.VoxyConfig.CONFIG.ingestEnabled=request.get("enabled").getAsBoolean();}
                         else if(command.equals("prediction-toggle")){DistantConfig.MOVEMENT_PREDICTION.set(request.get("enabled").getAsBoolean());}
                         else if(command.equals("cpu-view")){mc.options.pauseOnLostFocus=false;mc.options.enableVsync().set(false);mc.getWindow().updateVsync(false);mc.options.framerateLimit().set(260);mc.getWindow().setFramerateLimit(260);mc.setScreen(null);mc.player.setYRot(0);mc.player.setXRot(15);}
@@ -233,7 +242,7 @@ public final class LodClientBenchmark {
                         else if(command.equals("screenshot")){capture=request;}
                         else if(command.startsWith("settings-")){try{SettingsClientCheck.command(request);}catch(ReflectiveOperationException ex){throw new IllegalStateException(ex);}}
                         else throw new IllegalArgumentException("Unknown acceptance command "+command);
-                        if(!command.equals("screenshot")&&!command.equals("request-check"))ack(id,"ok",state());
+                        if(!command.equals("screenshot")&&!command.equals("request-check")&&!command.equals("discovery-state"))ack(id,"ok",state());
                     }catch(RuntimeException ex){com.mojang.logging.LogUtils.getLogger().error("Client acceptance command failed: "+id,ex);var details=state();details.addProperty("error",ex.toString());ack(id,"error",details);}
                 }
             }

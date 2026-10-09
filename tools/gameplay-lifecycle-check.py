@@ -10,7 +10,7 @@ import uuid
 
 root = Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser()
-parser.add_argument('--case', choices=['respawn'], required=True)
+parser.add_argument('--case', choices=['respawn','recovery'], required=True)
 args = parser.parse_args()
 run = root / 'build/gameplay-lifecycle'
 server_home, client_home = run / 'server', run / 'client'
@@ -75,16 +75,31 @@ try:
     wait(lambda:'Done (' in (out/'server/console.log').read_text(encoding='utf-8'))
     game=launch('client',client_home);wait(lambda:state().get('ready'));client('connect')
     wait(lambda:state().get('in_world') and state().get('lod_hello'))
-    server('gamerule doMobSpawning false\ngamerule keepInventory true\nspawnpoint LodBench 0 80 0\ntp LodBench 1024 100 0\ngamemode creative LodBench')
-    client('receive');wait(lambda:epoch()>0);before=epoch()
-    server('kill LodBench');wait(lambda:state().get('dead'));client('respawn')
-    wait(lambda:not state().get('dead') and epoch()>before)
-    print('LIVE_SAME_DIMENSION_RESPAWN_PASS epoch',before,'->',epoch(),flush=True)
-    server('execute in minecraft:the_nether run tp LodBench 0 100 0')
-    wait(lambda:state().get('dimension')=='minecraft:the_nether' and state().get('hello_dimension')=='minecraft:the_nether')
-    before=epoch();server('kill LodBench');wait(lambda:state().get('dead'));client('respawn')
-    wait(lambda:state().get('dimension')=='minecraft:overworld' and state().get('hello_dimension')=='minecraft:overworld' and epoch()>before)
-    print('LIVE_CROSS_DIMENSION_RESPAWN_PASS',json.dumps(state(),ensure_ascii=False),flush=True)
+    server('gamerule doMobSpawning false\ngamerule keepInventory true\nspawnpoint LodBench 0 80 0\ngamemode creative LodBench')
+    if args.case=='respawn':
+        server('tp LodBench 1024 100 0')
+        client('receive');wait(lambda:epoch()>0);before=epoch()
+        server('kill LodBench');wait(lambda:state().get('dead'));client('respawn')
+        wait(lambda:not state().get('dead') and epoch()>before)
+        print('LIVE_SAME_DIMENSION_RESPAWN_PASS epoch',before,'->',epoch(),flush=True)
+        server('execute in minecraft:the_nether run tp LodBench 0 100 0')
+        wait(lambda:state().get('dimension')=='minecraft:the_nether' and state().get('hello_dimension')=='minecraft:the_nether')
+        before=epoch();server('kill LodBench');wait(lambda:state().get('dead'));client('respawn')
+        wait(lambda:state().get('dimension')=='minecraft:overworld' and state().get('hello_dimension')=='minecraft:overworld' and epoch()>before)
+        print('LIVE_CROSS_DIMENSION_RESPAWN_PASS',json.dumps(state(),ensure_ascii=False),flush=True)
+    else:
+        server('tp LodBench 0 100 0\ngamemode spectator LodBench')
+        client('receive');wait(lambda:epoch()>0);time.sleep(5)
+        before=client('discovery-state');client('rebuild-index')
+        wait(lambda:'索引重建完成' in (out/'client/console.log').read_text(encoding='utf-8'))
+        time.sleep(3);after=client('discovery-state')
+        print('LIVE_INDEX_RECOVERY',before,after,flush=True)
+        assert after['regions']>0 and after['generation']>before['generation'], 'Stationary index recovery failed'
+        before_epoch=epoch();server('voxydistant import')
+        wait(lambda:'import 维护任务已结束' in (out/'server/console.log').read_text(encoding='utf-8'),180)
+        wait(lambda:epoch()>before_epoch,15)
+        after=client('discovery-state');assert after['regions']>0
+        print('LIVE_IMPORT_RECOVERY_PASS',after,flush=True)
     (out/'result.json').write_text(json.dumps(dict(passed=True,case=args.case,state=state()),ensure_ascii=False,indent=2),encoding='utf-8')
 finally:
     for p in reversed(processes):
