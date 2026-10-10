@@ -9,6 +9,7 @@
 /.tools/
 /.materials/
 /.codegraph/
+/.codex-research/
 
 # IDE and interpreter caches
 .idea/
