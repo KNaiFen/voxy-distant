@@ -15,7 +15,7 @@
 
 核对日期：**2026-10-10**；生产代码基线：`40da0a7`。版本 **0.2.27-forge-1.20.1**，网络协议 **17**，配置结构 **7**。版本分别以 [`build.gradle`](../build.gradle)、[`mods.toml`](../src/main/resources/META-INF/mods.toml)、[`Protocol`](../src/main/java/dev/voxydistant/network/Protocol.java) 和 [`DistantConfig`](../src/main/java/dev/voxydistant/config/DistantConfig.java) 为准。
 
-最新发行包为 [0.2.27](https://github.com/KNaiFen/noxy/releases/tag/0.2.27)，包含上述生产代码及目录整理；安装包身份与发行验证见[0.2.27 发行核验](reports/release-0.2.27.md)。
+最新发行包为 [0.2.27](https://github.com/KNaiFen/voxy-distant/releases/tag/0.2.27)，包含上述生产代码及目录整理；安装包身份与发行验证见[0.2.27 发行核验](reports/release-0.2.27.md)。
 
 | 已完成修复 | 提交 | 验证 |
 | --- | --- | --- |

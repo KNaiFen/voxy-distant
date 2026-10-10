@@ -2,16 +2,16 @@
 
 ## 编译依赖
 
-需要 Java 21。使用仓库内 Gradle Wrapper；编译依赖配套 [Voxy Forge](https://github.com/KNaiFen/voxy-forge-1.20.1) 的**开发版 JAR**，安装版 JAR 不能替代。
+需要 Java 21。使用仓库内 Gradle Wrapper；编译依赖配套 [Voxy Forge](https://github.com/KNaiFen/voxy) 的**开发版 JAR**，安装版 JAR 不能替代。
 
 ```sh
-git clone https://github.com/KNaiFen/voxy-forge-1.20.1.git
-cd voxy-forge-1.20.1
+git clone https://github.com/KNaiFen/voxy.git
+cd voxy
 git checkout 2294097bca526f6a629f7955afdd6d4c45b3cef0
 ./gradlew :1.20.1-forge:jar
 ```
 
-开发版输出在该仓库的 `versions/1.20.1-forge/build/devlibs/voxy-0.2.15-beta+1.20.1-legacyforge.jar`。返回 Noxy 根目录编译，替换下面的绝对路径：
+开发版输出在该仓库的 `versions/1.20.1-forge/build/devlibs/voxy-0.2.15-beta+1.20.1-legacyforge.jar`。返回 Voxy Distant 根目录编译，替换下面的绝对路径：
 
 ```sh
 ./gradlew test build -PvoxyJar=/绝对路径/voxy-0.2.15-beta+1.20.1-legacyforge.jar
@@ -19,7 +19,7 @@ git checkout 2294097bca526f6a629f7955afdd6d4c45b3cef0
 
 Windows 将 `./gradlew` 换成 `./gradlew.bat`。后续 Gradle 命令同样需要 `-PvoxyJar=...`；也可将该属性放入本机 `~/.gradle/gradle.properties`。未设置时默认读取 `.materials/voxy-compat-build/versions/1.20.1-forge/build/devlibs/` 下的同名 JAR，此本地依赖不随仓库提供。
 
-正式可安装 JAR 位于 `build/libs/`。生产依赖打包包含 RocksDB、Zstd 和 MixinExtras；Voxy 不随 Noxy 打包。当前原生库裁剪目标为 Windows x64 和 Linux x64。
+正式可安装 JAR 位于 `build/libs/`。生产依赖打包包含 RocksDB、Zstd 和 MixinExtras；Voxy 不随 Voxy Distant 打包。当前原生库裁剪目标为 Windows x64 和 Linux x64。
 
 ## 目录约定
 

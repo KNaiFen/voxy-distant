@@ -1,6 +1,6 @@
 # 代码结构与数据流程
 
-Noxy 负责远景生成、缓存、传输和与 Voxy 的衔接；体素渲染器由配套 Voxy 提供。当前平台是 Minecraft 1.20.1 Forge，Java 21。
+Voxy Distant 负责远景生成、缓存、传输和与 Voxy 的衔接；体素渲染器由配套 Voxy 提供。当前平台是 Minecraft 1.20.1 Forge，Java 21。
 
 ## 源码分工
 
