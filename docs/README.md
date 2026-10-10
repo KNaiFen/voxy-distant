@@ -13,7 +13,9 @@
 
 ## 当前源码状态
 
-核对日期：**2026-10-09**；生产代码基线：`40da0a7`。版本 **0.2.27-forge-1.20.1**，网络协议 **17**，配置结构 **7**。版本分别以 [`build.gradle`](../build.gradle)、[`mods.toml`](../src/main/resources/META-INF/mods.toml)、[`Protocol`](../src/main/java/dev/voxydistant/network/Protocol.java) 和 [`DistantConfig`](../src/main/java/dev/voxydistant/config/DistantConfig.java) 为准。
+核对日期：**2026-10-10**；生产代码基线：`40da0a7`。版本 **0.2.27-forge-1.20.1**，网络协议 **17**，配置结构 **7**。版本分别以 [`build.gradle`](../build.gradle)、[`mods.toml`](../src/main/resources/META-INF/mods.toml)、[`Protocol`](../src/main/java/dev/voxydistant/network/Protocol.java) 和 [`DistantConfig`](../src/main/java/dev/voxydistant/config/DistantConfig.java) 为准。
+
+最新发行包为 [0.2.27](https://github.com/KNaiFen/noxy/releases/tag/0.2.27)，包含上述生产代码及目录整理；安装包身份与发行验证见[0.2.27 发行核验](reports/release-0.2.27.md)。
 
 | 已完成修复 | 提交 | 验证 |
 | --- | --- | --- |
@@ -34,5 +36,6 @@
 | [极端移动恢复](reports/extreme-lod-recovery.md) | 0.2.27 / `69c9883`，2026-10-07 | 节点、版本与空缓存极端移动回归 |
 | [修复性能对照](reports/lod-fix-performance.md) | `dd21d22` → `69c9883`，2026-10-07 | 量化正确性修复的客户端与服务端成本 |
 | [游玩生命周期](reports/gameplay-lifecycle.md) | 截至 `40da0a7`，2026-10-09 | 三项最新问题的复现、修复和验证 |
+| [0.2.27 发行核验](reports/release-0.2.27.md) | 0.2.27，2026-10-10 | 当前发行安装包身份、验证命令与产物管理 |
 
 报告中的路径、哈希和统计描述对应测试当时的版本。Git 不包含大型测试环境或原始录制；复测准备以[开发指南](development.md)为准，不能把历史报告的 JAR 哈希当作当前构建哈希。
