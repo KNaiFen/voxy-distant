@@ -10,6 +10,7 @@
 /.materials/
 /.codegraph/
 /.codex-research/
+/AGENTS.md
 
 # IDE and interpreter caches
 .idea/
