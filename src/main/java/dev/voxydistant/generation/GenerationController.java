@@ -50,7 +50,7 @@ public final class GenerationController {
         var active=session;
         if(active!=null&&active.level.dimension()==mc.level.dimension()){
             if(offer!=null&&offered.compareAndSet(offer,null))offer.engine().releaseRef();
-        }else if(offer==null) {
+        }else if(offer==null&&me.cortex.voxy.client.config.VoxyConfig.CONFIG.ingestEnabled) {
             var engine=VoxyBridge.acquire(mc.level);if(engine!=null)offered.set(new Offer(engine,mc.level.dimension()));
         }
         var previous=target;
@@ -119,6 +119,7 @@ public final class GenerationController {
         private final Map<Long, Conversion> converting = new HashMap<>();
         private final Set<Long> failed = new HashSet<>();
         private final LocalDiscovery discovery=new LocalDiscovery();
+        private final Map<ChunkPos,CompletableFuture<dev.voxydistant.compat.CoverageStore.Directory>> directories=new HashMap<>();
         private final ConcurrentLinkedQueue<Conversion> finished = new ConcurrentLinkedQueue<>();
         private final AtomicLong memory = new AtomicLong();
         private final ThreadPoolExecutor workers;
@@ -134,6 +135,7 @@ public final class GenerationController {
         Session(ServerLevel level, WorldEngine engine) {
             this.level = level;
             this.engine = engine;
+            VoxyBridge.coverage(engine).height(level.getMinSection(),level.getMaxSection());
             int threads = DistantConfig.limits().threads();
             workers = new ThreadPoolExecutor(threads, threads, 30, TimeUnit.SECONDS, new LinkedBlockingQueue<>(), task -> {
                 var thread = new Thread(task, "Voxy Distant conversion");
@@ -151,7 +153,7 @@ public final class GenerationController {
                 workers.setMaximumPoolSize(limits.threads());
             }
             drainFinished();
-            boolean enabled = DistantConfig.ENABLED.get() && VoxyBridge.enabled();
+            boolean enabled = DistantConfig.ENABLED.get() && VoxyBridge.enabled() && me.cortex.voxy.client.config.VoxyConfig.CONFIG.ingestEnabled;
             if (enabled&&!desired.paused()&&(centerX==Integer.MIN_VALUE||Math.abs((long)centerX-desired.x())>32||Math.abs((long)centerZ-desired.z())>32||radius != desired.radius() || view != desired.view()||movementRevision!=desired.motion().revision())) {
                 centerX = desired.x(); centerZ = desired.z(); radius = desired.radius(); view = desired.view();
                 long timing=dev.voxydistant.DebugLog.start();movementRevision=desired.motion().revision();discovery.move(desired.motion().shape(radius,2048),view);dev.voxydistant.DebugLog.end(dev.voxydistant.DebugLog.Metric.LOCAL_RANGE,timing);
@@ -217,8 +219,17 @@ public final class GenerationController {
         private void refill(int cap) {
             if(!discovery.busy())return;
             long timing=dev.voxydistant.DebugLog.start();
+            for(var it=directories.entrySet().iterator();it.hasNext();){
+                var entry=it.next();if(!entry.getValue().isDone())continue;
+                var result=entry.getValue().join();it.remove();
+                if(result!=null)discovery.coverage(entry.getKey().x,entry.getKey().z,result);
+            }
             int remaining = Math.max(0, cap - generating.size() - converting.size());
-            discovery.step(DistantConfig.LOCAL_SCAN_COLUMNS_PER_TICK.get(),remaining,(x,z)->{var pos=new ChunkPos(x,z);long key=pos.toLong();return !failed.contains(key)&&!generating.containsKey(key)&&!converting.containsKey(key)&&level.getWorldBorder().isWithinBounds(pos)&&!VoxyBridge.coverage(engine).hasColumn(x,z,level.getMinSection(),level.getMaxSection());});
+            discovery.step(DistantConfig.LOCAL_SCAN_COLUMNS_PER_TICK.get(),remaining,(rx,rz)->{
+                var region=new ChunkPos(rx,rz);
+                if(directories.size()<4&&!directories.containsKey(region))directories.put(region,CompletableFuture.supplyAsync(()->VoxyBridge.coverage(engine).directory(rx,rz,true),workers));
+                return false;
+            },(x,z)->{var pos=new ChunkPos(x,z);long key=pos.toLong();return !failed.contains(key)&&!generating.containsKey(key)&&!converting.containsKey(key)&&level.getWorldBorder().isWithinBounds(pos)&&!VoxyBridge.coverage(engine).hasColumn(x,z,level.getMinSection(),level.getMaxSection());});
             dev.voxydistant.DebugLog.end(dev.voxydistant.DebugLog.Metric.LOCAL_DISCOVERY,timing);
         }
 

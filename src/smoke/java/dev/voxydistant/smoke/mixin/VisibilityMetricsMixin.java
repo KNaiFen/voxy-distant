@@ -40,7 +40,7 @@ public class VisibilityMetricsMixin {
             int offset=id*8;long pos=((long)metadata[offset]<<32)|Integer.toUnsignedLong(metadata[offset+1]);
             int level=WorldEngine.getLevel(pos),x=WorldEngine.getX(pos),y=WorldEngine.getY(pos),z=WorldEngine.getZ(pos),aabb=metadata[offset+2];
             boolean seen=(visibility[id]&0x7fffffff)==viewport.frameId;listed[level]++;if(seen)visible[level]++;
-            if(level<3&&(Math.abs(x*(32<<level))>256||Math.abs(z*(32<<level))>256))continue;
+            if(!Boolean.getBoolean("voxyDistant.nodeDiagnostic")&&level<3&&(Math.abs(x*(32<<level))>256||Math.abs(z*(32<<level))>256))continue;
             int scale=1<<level;
             double minX=(x*32+(aabb&31)-1)*scale,minY=(y*32+((aabb>>5)&31)-1)*scale,minZ=(z*32+((aabb>>10)&31)-1)*scale;
             double maxX=minX+(((aabb>>15)&31)+3)*scale,maxY=minY+(((aabb>>20)&31)+3)*scale,maxZ=minZ+(((aabb>>25)&31)+3)*scale;

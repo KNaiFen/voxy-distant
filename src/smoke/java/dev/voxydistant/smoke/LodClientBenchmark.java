@@ -50,7 +50,7 @@ public final class LodClientBenchmark {
         importSamples=new PrintWriter(Files.newBufferedWriter(LodBenchmark.OUTPUT.resolve("voxy-import.csv")));
         importSamples.println("epoch_ms,time_ns,running,completed,total,estimated,backlog,service_jobs,saving_jobs,native_buffer_bytes");
         frames=new PrintWriter(Files.newBufferedWriter(LodBenchmark.OUTPUT.resolve("frames.csv")));
-        frames.println("time_ns,frame_ns,in_world");
+        frames.println("time_ns,frame_ns,in_world,render_ns");
         samples=new PrintWriter(Files.newBufferedWriter(LodBenchmark.OUTPUT.resolve("client-samples.csv")));
         samples.println("time_ns,incoming_tcp_payload,outgoing_tcp_payload,heap_bytes,process_cpu_ns,applied,received,memory,pending,queue,active,scanning,invalid,mesh_queue,geometry_bytes,geometry_sections,receive_limit,snapshot_limit,advertised_credit,full_retry,retries,status");
         threads=new PrintWriter(Files.newBufferedWriter(LodBenchmark.OUTPUT.resolve("threads.csv")));
@@ -59,11 +59,12 @@ public final class LodClientBenchmark {
         MinecraftForge.EVENT_BUS.addListener(this::tick);
         Runtime.getRuntime().addShutdownHook(new Thread(()->{frames.close();samples.close();threads.close();importSamples.close();}));
     }
+    private long renderStart;
     private void frame(TickEvent.RenderTickEvent e) {
-        if(e.phase!=TickEvent.Phase.END)return;
+        if(e.phase==TickEvent.Phase.START){renderStart=System.nanoTime();return;}
         if(holdLocalPause&&!(Minecraft.getInstance().screen instanceof net.minecraft.client.gui.screens.PauseScreen))Minecraft.getInstance().setScreen(new net.minecraft.client.gui.screens.PauseScreen(true));
         if(recordingFailure!=null)throw recordingFailure;
-        long now=System.nanoTime();if(lastFrame!=0)frames.printf(Locale.ROOT,"%d,%d,%s%n",now,now-lastFrame,Minecraft.getInstance().level!=null);lastFrame=now;
+        long now=System.nanoTime();if(lastFrame!=0)frames.printf(Locale.ROOT,"%d,%d,%s,%d%n",now,now-lastFrame,Minecraft.getInstance().level!=null,now-renderStart);lastFrame=now;
         if(capture==null&&recording&&!recordingPending&&now-lastRecordedFrame>=200_000_000L){
             lastRecordedFrame=now;recordingPending=true;capture=new JsonObject();
             capture.addProperty("id",String.format(Locale.ROOT,"record-%06d",recordedFrames++));
@@ -95,12 +96,17 @@ public final class LodClientBenchmark {
         state.addProperty("overlay",mc.getOverlay()==null?"":mc.getOverlay().getClass().getSimpleName());
         state.addProperty("ready",mc.screen instanceof TitleScreen&&mc.getOverlay()==null);
         state.addProperty("in_world",mc.level!=null&&mc.player!=null);
+        state.addProperty("vsync",mc.options.enableVsync().get());state.addProperty("max_fps",mc.getWindow().getFramerateLimit());
         state.addProperty("lod_hello",RemoteClient.greeting()!=null);
+        if(mc.level!=null)state.addProperty("dimension",mc.level.dimension().location().toString());
+        if(RemoteClient.greeting()!=null)state.addProperty("hello_dimension",RemoteClient.greeting().dimension());
+        if(mc.player!=null)state.addProperty("dead",mc.player.isDeadOrDying());
         if(RemoteClient.greeting()!=null){state.addProperty("hello_radius",RemoteClient.greeting().radius());state.add("hello_bands",json.toJsonTree(RemoteClient.greeting().bands()));}
         state.addProperty("status",RemoteClient.status());
         state.addProperty("receive_memory_mib",DistantConfig.RECEIVE_MIB.get());
         state.addProperty("request_window_columns",DistantConfig.REQUEST_WINDOW.get());
         state.addProperty("mask_bypass",Boolean.getBoolean("voxyDistant.maskBypass"));
+        state.addProperty("auto_ingest",me.cortex.voxy.client.config.VoxyConfig.CONFIG.ingestEnabled);
         var motion=dev.voxydistant.movement.MovementPrediction.CLIENT.snapshot();state.addProperty("prediction_speed",motion.speed());state.addProperty("prediction_amount",motion.amount());state.addProperty("prediction_center_x",motion.centerX());state.addProperty("prediction_center_z",motion.centerZ());
         state.addProperty("cruise_segment",cruiseSegment);state.addProperty("cruise_done",cruiseRoute!=null&&cruiseSegment>=cruiseRoute.size());
         var local=dev.voxydistant.generation.GenerationController.status();state.addProperty("local_completed",local.completed());state.addProperty("local_generating",local.generating());state.addProperty("local_converting",local.converting());state.addProperty("local_bytes",local.bytes());state.addProperty("local_reason",local.reason());state.addProperty("local_failure",local.failure());
@@ -152,7 +158,8 @@ public final class LodClientBenchmark {
             if(distance<=step){cameraX=x;cameraZ=z;cruiseSegment++;}else{cameraX+=dx/distance*step;cameraZ+=dz/distance*step;}
             if(Boolean.getBoolean("voxyDistant.cpuCheck")){var p=mc.player;p.move(net.minecraft.world.entity.MoverType.SELF,new net.minecraft.world.phys.Vec3(cameraX-p.getX(),0,cameraZ-p.getZ()));p.setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);p.connection.send(new net.minecraft.network.protocol.game.ServerboundMovePlayerPacket.Pos(p.getX(),p.getY(),p.getZ(),p.onGround()));}
         }
-        if(Boolean.getBoolean("voxyDistant.fixedCamera")&&Minecraft.getInstance().player!=null){var p=Minecraft.getInstance().player;p.setPos(cameraX,180,cameraZ);p.setYRot(cameraYaw);p.setXRot(15);}
+        if(Boolean.getBoolean("voxyDistant.fixedCamera")&&Minecraft.getInstance().player!=null){var p=Minecraft.getInstance().player;p.setPos(cameraX,180,cameraZ);p.setYRot(cameraYaw);p.setXRot(15);
+            if(cruiseRoute!=null&&cruiseSegment<cruiseRoute.size())p.connection.send(new net.minecraft.network.protocol.game.ServerboundMovePlayerPacket.Pos(cameraX,180,cameraZ,p.onGround()));}
         if(Boolean.getBoolean("voxyDistant.cpuCheck")&&mc.screen instanceof net.minecraft.client.gui.screens.PauseScreen)mc.setScreen(null);
         long now=System.nanoTime();if(now-lastSample<1_000_000_000)return;lastSample=now;
         try {
@@ -192,21 +199,52 @@ public final class LodClientBenchmark {
                         }
                         else if(command.equals("receive")){if(mc.level==null||RemoteClient.greeting()==null)throw new IllegalStateException("World or LOD handshake not ready");if(Boolean.getBoolean("voxyDistant.fixedCamera")){mc.options.pauseOnLostFocus=false;mc.setScreen(null);}recording=Boolean.getBoolean("voxyDistant.recordProcess");DistantConfig.RECEIVE.set(true);}
                         else if(command.equals("receive-disable")){DistantConfig.RECEIVE.set(false);}
+                        else if(command.equals("respawn")){mc.player.respawn();}
+                        else if(command.equals("rebuild-index")){if(!net.minecraftforge.client.ClientCommandHandler.runCommand("voxydistant rebuildindex"))throw new IllegalStateException("Index command not handled");}
+                        else if(command.equals("discovery-state")){
+                            var currentField=RemoteClient.class.getDeclaredField("session");currentField.setAccessible(true);Object current=currentField.get(null);
+                            ((ThreadPoolExecutor)LodMetrics.field(current,"worker")).execute(()->{
+                                var details=new JsonObject();details.addProperty("regions",((Map<?,?>)LodMetrics.field(LodMetrics.field(current,"discovery"),"regions")).size());
+                                details.addProperty("generation",(int)LodMetrics.field(current,"generation"));details.addProperty("center",(int)LodMetrics.field(current,"x"));
+                                mc.execute(()->{try{ack(id,"ok",details);}catch(IOException ex){throw new UncheckedIOException(ex);}});
+                            });
+                        }
+                        else if(command.equals("auto-ingest")){me.cortex.voxy.client.config.VoxyConfig.CONFIG.ingestEnabled=request.get("enabled").getAsBoolean();}
                         else if(command.equals("prediction-toggle")){DistantConfig.MOVEMENT_PREDICTION.set(request.get("enabled").getAsBoolean());}
-                        else if(command.equals("cpu-view")){mc.options.pauseOnLostFocus=false;mc.options.enableVsync().set(false);mc.getWindow().updateVsync(false);mc.options.framerateLimit().set(260);mc.setScreen(null);mc.player.setYRot(0);mc.player.setXRot(15);}
+                        else if(command.equals("cpu-view")){mc.options.pauseOnLostFocus=false;mc.options.enableVsync().set(false);mc.getWindow().updateVsync(false);mc.options.framerateLimit().set(260);mc.getWindow().setFramerateLimit(260);mc.setScreen(null);mc.player.setYRot(0);mc.player.setXRot(15);}
                         else if(command.equals("disconnect")){if(mc.level==null)throw new IllegalStateException("Not in a world");mc.level.disconnect();mc.clearLevel();mc.setScreen(new TitleScreen());}
                         else if(command.equals("quit")){mc.stop();}
                         else if(command.equals("reload")){DistantConfig.reload();}
                         else if(command.equals("renderer")){dev.voxydistant.compat.VoxyBridge.resetRenderer();}
                         else if(command.equals("turn")){cameraYaw+=90;}
-                        else if(command.equals("move-camera")){cameraX=request.get("x").getAsDouble();cameraZ=request.get("z").getAsDouble();mc.player.setPos(cameraX,180,cameraZ);}
+                        else if(command.equals("move-camera")){cruiseRoute=null;cameraX=request.get("x").getAsDouble();cameraZ=request.get("z").getAsDouble();mc.player.setPos(cameraX,180,cameraZ);}
+                        else if(command.equals("receive-radius")){DistantConfig.RECEIVE_RADIUS.set(request.get("radius").getAsInt());}
                         else if(command.equals("cruise")){cruiseRoute=request.getAsJsonArray("waypoints");cruiseSegment=0;cruiseSpeed=request.has("speed")?request.get("speed").getAsDouble():22;}
                         else if(command.equals("prediction-local")){mc.options.pauseOnLostFocus=false;mc.setScreen(null);DistantConfig.RECEIVE.set(false);DistantConfig.ENABLED.set(true);DistantConfig.RADIUS.set(24);}
                         else if(command.equals("local-disable")){holdLocalPause=false;mc.setScreen(null);DistantConfig.ENABLED.set(false);}
+                        else if(command.equals("local-cache-setup")){
+                            mc.options.pauseOnLostFocus=false;mc.setScreen(null);mc.options.renderDistance().set(2);
+                            me.cortex.voxy.client.config.VoxyConfig.CONFIG.ingestEnabled=true;
+                            DistantConfig.ENABLED.set(true);DistantConfig.RADIUS.set(8);
+                            DistantConfig.MOVEMENT_PREDICTION.set(false);
+                            mc.getSingleplayerServer().execute(()->mc.getSingleplayerServer().getPlayerList().setViewDistance(2));
+                        }
+                        else if(command.equals("local-cache-check")){
+                            mc.getSingleplayerServer().submit(()->{try{LocalCacheCheck.run(mc.getSingleplayerServer().overworld());}catch(Exception ex){throw new java.util.concurrent.CompletionException(ex);}}).whenComplete((unused,error)->mc.execute(()->{
+                                try{var details=state();if(error!=null)details.addProperty("error",error.toString());ack(id,error==null?"ok":"error",details);}catch(IOException ex){throw new UncheckedIOException(ex);}
+                            }));
+                        }
                         else if(command.equals("local-pause")){holdLocalPause=true;mc.setScreen(new net.minecraft.client.gui.screens.PauseScreen(true));}
                         else if(command.equals("mask-off")){System.setProperty("voxyDistant.maskBypass","true");}
                         else if(command.equals("mask-on")){System.setProperty("voxyDistant.maskBypass","false");}
-                        else if(command.equals("audit")){auditCursor=0;auditedLevels=new int[6];auditedInsufficient=0;}
+                        else if(command.equals("audit")){
+                            auditCursor=0;auditedLevels=new int[6];auditedInsufficient=0;
+                            if(Boolean.getBoolean("voxyDistant.nodeDiagnostic")){
+                                var renderer=me.cortex.voxy.client.core.IGetVoxyRenderSystem.getNullable();
+                                var batch=new me.cortex.voxy.common.util.MemoryBuffer(8);org.lwjgl.system.MemoryUtil.memPutLong(batch.address,0);
+                                ((me.cortex.voxy.client.core.rendering.hierachical.AsyncNodeManager)LodMetrics.field(renderer,"nodeManager")).submitRequestBatch(batch);
+                            }
+                        }
                         else if(command.equals("request-check")){
                             RequestCompletionCheck.run().whenComplete((unused,error)->{
                                 try{var details=state();if(error!=null)details.addProperty("error",error.toString());ack(id,error==null?"ok":"error",details);}
@@ -216,7 +254,7 @@ public final class LodClientBenchmark {
                         else if(command.equals("screenshot")){capture=request;}
                         else if(command.startsWith("settings-")){try{SettingsClientCheck.command(request);}catch(ReflectiveOperationException ex){throw new IllegalStateException(ex);}}
                         else throw new IllegalArgumentException("Unknown acceptance command "+command);
-                        if(!command.equals("screenshot")&&!command.equals("request-check"))ack(id,"ok",state());
+                        if(!command.equals("screenshot")&&!command.equals("request-check")&&!command.equals("discovery-state")&&!command.equals("local-cache-check"))ack(id,"ok",state());
                     }catch(RuntimeException ex){com.mojang.logging.LogUtils.getLogger().error("Client acceptance command failed: "+id,ex);var details=state();details.addProperty("error",ex.toString());ack(id,"error",details);}
                 }
             }
@@ -244,12 +282,16 @@ public final class LodClientBenchmark {
                     int radius=(int)LodMetrics.field(session,"radius"),width=radius*2+1;
                     var engine=(me.cortex.voxy.common.world.WorldEngine)LodMetrics.field(session,"engine");
                     var coverage=dev.voxydistant.compat.VoxyBridge.coverage(engine);
+                    var lightField=RemoteClient.class.getDeclaredField("lightReady");lightField.setAccessible(true);var lightReady=(Set<?>)lightField.get(null);
                     for(int budget=0;budget<8192&&auditCursor<width*width;budget++,auditCursor++){
                         int dx=auditCursor%width-radius,dz=auditCursor/width-radius;
                         if(dx*dx+dz*dz>radius*radius)continue;
                         int x=mc.player.chunkPosition().x+dx,z=mc.player.chunkPosition().z+dz;
                         var stamp=coverage.column(x,z,mc.level.getMinSection(),mc.level.getMaxSection());auditedLevels[stamp.level()]++;
-                        if(stamp.level()>((dev.voxydistant.config.DistanceBands)LodMetrics.field(session,"bands")).select(x,z,mc.player.chunkPosition().x,mc.player.chunkPosition().z))auditedInsufficient++;
+                        if(stamp.level()>((dev.voxydistant.config.DistanceBands)LodMetrics.field(session,"bands")).select(x,z,mc.player.chunkPosition().x,mc.player.chunkPosition().z)){
+                            auditedInsufficient++;long p=net.minecraft.world.level.ChunkPos.asLong(x,z);
+                            System.out.println("DISTANT_AUDIT_INSUFFICIENT x="+x+" z="+z+" stamp="+stamp+" loaded="+((Set<?>)LodMetrics.field(session,"loadedFull")).contains(p)+" version="+((Map<?,?>)LodMetrics.field(session,"versions")).get(p)+" capture="+((Map<?,?>)LodMetrics.field(session,"captures")).get(p)+" light="+lightReady.contains(p)+" actual="+(mc.level.getChunkSource().getChunk(x,z,net.minecraft.world.level.chunk.ChunkStatus.FULL,false)!=null));
+                        }
                         if(stamp.level()==5)System.out.println("DISTANT_AUDIT_MISSING x="+x+" z="+z+" full_retry="+fullRetry+" queue="+queue+" active="+active);
                     }
                     if(auditCursor==width*width){

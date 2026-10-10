@@ -1,5 +1,7 @@
 # 空缓存客户端半径 256 的传输与热点（2026-10-04）
 
+历史验证：0.2.23 → 0.2.24。本报告为首页吞吐与载荷数字的来源，不代表当前源码重新测得的性能。现行测试准备见[开发指南](../development.md)。
+
 对照代码：`6b85623`（0.2.23）。本轮完成真实 Forge 客户端 / 专用服 socket 传输、双端 JFR 定位、算法与保存调度优化、关闭 JFR / 诊断日志的对照，以及单玩家调度参数试验。生产版本号、协议 17 和配置结构 7 保持不变。
 
 成功标准：客户端启动前没有 `.voxy`，接收半径确认为 256 区块，完成全部目标列且覆盖无缺口；定位 CPU / 等待热点，在不改变缓存、版本、请求 ID、信用释放和主线程边界的前提下减少工作；通过构建、真实 Voxy 摄入和客户端请求生命周期验证。
@@ -103,6 +105,6 @@ python tools/lod-live-benchmark.py --profiles default --rounds 1 --rate custom -
 python tools/lod-live-benchmark.py --profiles default --rounds 1 --rate custom --radius 256 --cold-client --acceptance --player-concurrency 16 --server-requests-per-tick 1024 --capture-interval 60 --tag cold256-tuning
 ```
 
-本地根目录 `build/benchmarks/lod-square256-cache128/live/`；有效运行标签：`cold256-v023-baseline`、`cold256-skipdecode`、`cold256-batchnodes`、`cold256-batchlock`、`cold256-clean-before2`、`cold256-clean-after2`、`cold256-tuned`。每轮有 `run.json`、`source.patch`、`build-hashes.json`、`receive-start.json`、`acceptance.json`、`measurement.json`、双端 samples / operations、client frames / transport / coverage、exits、screenshots；diag 轮另有双端 `pipeline.jfr`、`jfr-hotspots.csv`。
+原始运行位于 `build/benchmarks/lod-square256-cache128/live/`；有效运行标签为 `cold256-v023-baseline`、`cold256-skipdecode`、`cold256-batchnodes`、`cold256-batchlock`、`cold256-clean-before2`、`cold256-clean-after2`、`cold256-tuned`。2026-10-09 清理后，七轮的 `measurement.json`、运行配置、生产类哈希、源码差异、接收起点和验收/退出结果集中保留在 `build/cold-client-transfer-evidence/<运行标签>/`，另保留最终无诊断对照的新旧各一张截图，共 3,286,357 字节（约 3.13 MiB），用于核对本文和首页数据；被新复测替代或核对用途结束后删除。复制前后 SHA-256 一致。
 
-对照原类目录 `build/cold256-before-source/` / `build/cold256-before-classes/`，恢复的最终类快照 `build/cold256-final-classes/`。性能产物和临时 JFR 分析 / JVM 诊断脚本仅在 build，不纳入 Git。报告中的数值只来自明确列出的运行，不混用 README 旧数据。
+已删除完整原始采样、JFR、重复截图和旧运行目录，以及 `build/cold256-before-source/`、`build/cold256-before-classes/`、`build/cold256-final-classes/` 等一次性对照构建与分析脚本。本文数值仍来自上述历史运行，没有重新测量或修改；精简后的证据可核对结果，不能重新分析已经删除的完整逐帧采样。唯一预生成测试基线继续保留，当前产物管理见[开发指南](../development.md)。

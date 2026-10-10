@@ -1,59 +1,51 @@
 # Noxy / voxy-distant
 
-Noxy（原 voxy-distant）是 [Voxy](https://github.com/MCRcortex/voxy) 的附属 Mod，它让 Voxy 除了在本地生成 LOD，还能从多人服务器接收预先生成或缓存的远景。并且能让客户端按距离接收所需精度的LOD，远的模糊点，靠近时再补齐细节；这样减少了需要下载的数据量和服务器出口流量：载荷**降低十倍**的同时保持画面质量基本不变（只要你不放大看🤓）。让 Voxy 远景在多人服务器上实际可用。
+Noxy 是 [Voxy](https://github.com/MCRcortex/voxy) 的附属 Mod，为 Minecraft 1.20.1 Forge 提供单人远景生成和多人服务器 LOD 传输。服务器缓存地形远景，客户端按距离接收所需精度，靠近后补齐细节；渲染由配套 Voxy 完成。
 
-## 实际表现
+## 安装
 
-Voxy 的 LOD 分为 L0～L4，每个体素的边长分别约为 1、2、4、8、16 个方块。默认设置 `32:0,64:1,96:2`：近处约 32 区块传 L0，中距离传 L1，更远处传 L2；走近时再补细节。远处少传看不清的小方块，多列 LOD 再合并压缩，画面保留近景细节和远景轮廓。
+支持 **Minecraft 1.20.1、Forge 47.4.0～47.x、Java 21、Windows/Linux x64**。
 
-测试场景：0.2.24，Forge 1.20.1 服务端，除 Noxy 外没装别的 MOD，预生成了 **512×512 区块**的地形和完整 L0～L4 远景 LOD。客户端与服务器同在一台 Ryzen 7 9700X 电脑，通过本机网络连接，LOD 带宽上限 30 Mbps。
-接收客户端是空缓存，原地不动，接收半径 **256 区块**内的 **205,548** 列 LOD 远景。
+| 安装位置 | 所需 Mod |
+| --- | --- |
+| 客户端 | [Noxy](https://github.com/KNaiFen/noxy/releases)、[Voxy Forge 0.2.15-beta](https://github.com/KNaiFen/voxy-forge-1.20.1/releases/tag/forge-1.20.1-win-linux-x64-upstream-9a2110caa657)、[Embeddium 0.3.31](https://modrinth.com/mod/embeddium/version/UTbfe5d1) |
+| 专用服务器 | Noxy；无需安装 Voxy 或 Embeddium |
 
-| 同一半径 256 区块范围 | 数据量 |
-| --- | ---: |
-| 服务端缓存中的完整 LOD 数据（205,548 列） | **1,500.46 MB** |
-| Noxy 默认设置下，客户端实际收到的 LOD 载荷 | **117.93 MB** |
-| 相比完整 LOD，减少的流量载荷 | **1,382.53 MB（92.14%）** |
+把安装版 JAR 放入游戏或服务器的 `mods/`。Voxy 选择不带 `-dev` 后缀的安装包。多人远景传输需要服务器也安装兼容的 Noxy；客户端仍可连接没有 Noxy 的服务器，但不能从中下载服务端远景。
 
-表中服务端数据量是这 **205,548列** 完整 LOD 在硬盘上占用的空间。如果把这些数据直接发给玩家，就需要约 1,500.46 MB；Noxy 优化下，本轮实际只发了 117.93 MB，按此口径每位玩家少用约 **1,382.53 MB（92.14%）** 的 LOD 流量载荷。
-LOD 从首片传输到末片约 **62.34 秒**，平均载荷吞吐 **15.13 Mbps**；客户端应用速度约 **3,287 列/秒**，半径内连同原版近景共 **205,861 列**通过覆盖检查，无缺口。同条件的 0.2.23 对照为 75.27 秒、12.54 Mbps、2,689 列/秒；0.2.24 的载荷吞吐提高约 **20.7%**。
-这是预生成缓存的本机传输结果，不代表公网或首次世界生成速度；本轮没有测出 low 帧改善。史诗地形等 MOD 可能改变实际传输量，本次测试没有覆盖这些场景。[完整测试条件与结果](docs/cold-client-transfer-2026-10-04.md)。
+进入游戏后，在原版“选项”页点击 **VD** 按钮。配置文件为 `config/voxy_distant.toml`；OP 等级 2 可在 VD 页面调整服务器设置。
 
-## 安装与使用
+## 功能与当前状态
 
-兼容 **Minecraft 1.20.1、Forge 47.4.0～47.x、Java 21**。
-下载：从 [发行页](https://github.com/KNaiFen/noxy/releases) 下载 jar 文件。
-客户端安装本项目、[Voxy Forge 1.20.1 0.2.15-beta（Windows/Linux x64）](https://github.com/KNaiFen/voxy-forge-1.20.1/releases/tag/forge-1.20.1-win-linux-x64-upstream-9a2110caa657)（下载不带 `-dev` 后缀的 JAR；[源码仓库](https://github.com/KNaiFen/voxy-forge-1.20.1)）和 [Embeddium 0.3.31](https://modrinth.com/mod/embeddium/version/UTbfe5d1)；
-服务器只安装本项目即可。
+- 单人世界在玩家周围生成远景，复用已经保存的完整 LOD。
+- 多人服务端缓存 L0～L4，按距离选择精度并合批压缩；移动、转向和靠近时继续补齐。
+- 支持已有世界导入、预生成、带宽与内存预算、服务端负载节流，以及客户端手动重建覆盖索引。
+- 当前源码版本 **0.2.27-forge-1.20.1**，协议 **17**。已包含高速移动恢复、节点与缓存版本一致性，以及死亡重生、维护后原地恢复、单人缓存识别修复。源码状态与公开发行包应分别核对，下载版本以发行页为准。
 
-安装后即可使用；在原版“选项”页点击与 Distant Horizons 按钮同位置的 **VD** 小按钮进行设置。OP 等级 2 可在其中在线调整服务器设置。配置文件为 `config/voxy_distant.toml`。
+Voxy 的 **Chunk Ingest（区块摄入）** 与 VD 的“接收服务端远景”独立。远程接收需要开启 Voxy 渲染；单人本地生成仍需开启区块摄入。
 
-客户端和服务端不再在启动时全盘检查、重建索引。进入服务器或单人存档并开启 Voxy 后，可在聊天栏执行 **`/voxydistant rebuildindex`**：这是无需 OP 的客户端命令，在后台强制扫描当前连接、当前维度实际保存的 Voxy LOD，并重建覆盖索引；其他服务器、存档和维度的缓存不参与。切换世界或退出连接会取消任务，再次执行会从头扫描。已有可信版本和未完成的实时写入会保留；旧 Voxy 缓存无法还原服务器版本或区分未摄取的空气，相关数据仍需向服务器校验。
+## 传输表现
 
-## 从源码编译
+0.2.24 的一次本机空缓存对照中，接收半径 256 区块、205,548 列远景：完整服务端缓存为 **1,500.46 MB**，实际 LOD 载荷为 **117.93 MB**，按该口径减少 **92.14%**；首片至末片 **62.34 秒**，平均载荷吞吐 **15.13 Mbps**。
 
-普通玩家下载上面的 JAR 安装即可，这部分只给开发者。Noxy 编译时要读取配套 Voxy Forge 的**开发版 JAR**；游戏安装用的 Voxy JAR 不能代替它。
+这是 Ryzen 7 9700X、预生成世界、30 Mbps 限额下的历史结果，不代表当前版本的公网速度、首次世界生成速度或帧率收益。[测试条件与完整数据](docs/reports/cold-client-transfer.md)；[0.2.27 修复的性能成本](docs/reports/lod-fix-performance.md)。
 
-先下载 Voxy Forge 源码，切到本项目使用的版本并生成开发版 JAR：
+## 文档与开发
 
-```sh
-git clone https://github.com/KNaiFen/voxy-forge-1.20.1.git
-cd voxy-forge-1.20.1
-git checkout 2294097bca526f6a629f7955afdd6d4c45b3cef0
-./gradlew :1.20.1-forge:jar
-```
+- [文档索引与当前验证状态](docs/README.md)
+- [使用、配置与管理命令](docs/usage.md)
+- [构建、测试与目录约定](docs/development.md)
+- [代码结构与数据流程](docs/architecture.md)
 
-`git clone` 下载源码，`git checkout` 固定兼容的版本，最后一条命令编译 Minecraft 1.20.1 Forge 版。完成后，开发版 JAR 在该仓库的 `versions/1.20.1-forge/build/devlibs/voxy-0.2.15-beta+1.20.1-legacyforge.jar`。
-
-再到 Noxy 源码根目录运行以下命令。`-PvoxyJar=` 后面填写刚生成的开发版 JAR 的**绝对路径**，不要照抄示例路径：
+源码构建使用 Java 21 和配套 Voxy 的开发版 JAR：
 
 ```sh
 ./gradlew build -PvoxyJar=/绝对路径/voxy-0.2.15-beta+1.20.1-legacyforge.jar
 ```
 
-Noxy 构建使用 Java 21；成功后，可安装的 JAR 位于 `build/libs/`。Windows 上把 `./gradlew` 换成 `./gradlew.bat`。
+可安装 JAR 输出到 `build/libs/`。Windows 使用 `./gradlew.bat`；依赖的固定提交及完整步骤见开发指南。
 
 ## 致谢与许可
 
 本项目为纯 **VibeCoding** 项目，遵循 [MIT 协议](LICENSE)。
-感谢 [Codex](https://chatgpt.com/codex) 大人，感谢 [Distant Horizons](https://gitlab.com/distant-horizons-team/distant-horizons) 和 [Voxy](https://github.com/MCRcortex/voxy)。
+感谢 [Codex](https://chatgpt.com/codex)、[Distant Horizons](https://gitlab.com/distant-horizons-team/distant-horizons) 和 [Voxy](https://github.com/MCRcortex/voxy)。

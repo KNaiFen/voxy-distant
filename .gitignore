@@ -1,10 +1,19 @@
-.gradle/
-build/
-dist/
-run/
-logs/
-*.log
-.idea/
-__pycache__/
+# Gradle outputs and caches
+/.gradle/
+/build/
+
+# Local runtime, logs, deliveries and development material
+/.run/
+/.logs/
+/.dist/
+/.tools/
 /.materials/
 /.codegraph/
+
+# IDE and interpreter caches
+.idea/
+__pycache__/
+
+# Game/tool logs, including rotated logs
+*.log
+*.log.gz

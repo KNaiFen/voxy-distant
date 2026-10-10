@@ -3,7 +3,7 @@
   "minVersion": "0.8",
   "package": "dev.voxydistant.smoke.mixin",
   "compatibilityLevel": "JAVA_17",
-  "mixins": ["CodecMetricsMixin", "BatchCodecMetricsMixin"],
-  "client": ["ReceiveMetricsMixin", "TransportMetricsMixin", "VisibilityMetricsMixin", "MeshQueueMetricsMixin", "MaskDiagnosticMixin"],
+  "mixins": ["CodecMetricsMixin", "BatchCodecMetricsMixin", "ExtremeMovementMixin"],
+  "client": ["ReceiveMetricsMixin", "TransportMetricsMixin", "VisibilityMetricsMixin", "MeshQueueMetricsMixin", "MaskDiagnosticMixin", "NodeMetricsMixin"],
   "injectors": {"defaultRequire": 1}
 }

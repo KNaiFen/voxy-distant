@@ -93,6 +93,7 @@ public final class ServerSmoke {
             while(!receipts.isEmpty())receipts.remove().run();
             if(++ticks>2400)throw new AssertionError("server integration timed out: "+RemoteServer.status());
             Object service=current();if(service==null||field(service,"world")==null)return;
+            if(Boolean.getBoolean("voxyDistant.respawnCheck")){RespawnCheck.run(server,service);stage=3;server.halt(false);server=null;return;}
             for(Peer p:peers)if(p.retry){p.retry=false;RemoteServer.requests(p.player,new Protocol.Requests(1,96,2,0,32<<20,List.of(new Protocol.Want(40,40,0,5))));}
             if(ticks%200==0)System.out.println("DISTANT_SMOKE_PROGRESS stage="+stage+" "+RemoteServer.status());
             if(stage==0){
@@ -127,6 +128,13 @@ public final class ServerSmoke {
                 check(((Long)field(service,"completed"))==1,"cached different levels do not regenerate");
                 peers.getLast().player.setPos(0,100,0);
                 check(server.overworld().getChunkSource().getChunkNow(40,40)==null,"cached column stays unloaded");
+                var vanillaKey=new RemoteServer.Key(net.minecraft.world.level.Level.OVERWORLD,40,40);
+                ((Map<?,?>)field(service,"versions")).remove(vanillaKey);
+                RemoteServer.vanillaSent(peers.getFirst().player,40,40);
+                long vanillaRevision=(Long)((Map<?,?>)field(service,"versions")).get(vanillaKey);
+                check(Objects.equals(((Map<?,?>)field(service,"dirty")).get(vanillaKey),vanillaRevision),"new vanilla revision queues persistent cache invalidation");
+                RemoteServer.vanillaSent(peers.getFirst().player,40,40);
+                check(Objects.equals(((Map<?,?>)field(service,"versions")).get(vanillaKey),vanillaRevision),"repeated vanilla packet reuses revision");
                 unloadedDirtyVersion=(Long)((Map<?,?>)field(service,"dirty")).get(new RemoteServer.Key(net.minecraft.world.level.Level.OVERWORLD,40,40));
                 RemoteServer.lightDirty(server.overworld(),40,40);stage=6;
             }
@@ -134,6 +142,11 @@ public final class ServerSmoke {
                 var key=new RemoteServer.Key(net.minecraft.world.level.Level.OVERWORLD,40,40);
                 var dirtyVersion=((Map<?,?>)field(service,"dirty")).get(key);
                 check(dirtyVersion==null||Objects.equals(dirtyVersion,unloadedDirtyVersion),"unloaded light notification does not add a new invalidation");
+                var metadata=((LodDatabase)field(service,"database")).metadata(LodDatabase.key("minecraft:overworld",net.minecraft.world.level.ChunkPos.asLong(40,40),1));
+                if(metadata.invalid()<unloadedDirtyVersion)return;
+                ((Map<?,?>)field(service,"versions")).remove(key);
+                check(!metadata.current(),"vanilla invalidation survives loaded revision pruning");
+                System.out.println("DISTANT_VANILLA_REVISION_PASS: new vanilla stamp persists before pruning and repeated packets reuse the stamp");
                 var pos=new net.minecraft.world.level.ChunkPos(40,40);server.overworld().getChunkSource().addRegionTicket(TicketType.FORCED,pos,0,pos);stage=4;
             }
             if(stage==4){

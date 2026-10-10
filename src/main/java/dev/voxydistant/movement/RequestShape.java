@@ -22,6 +22,11 @@ public record RequestShape(int playerX,int playerZ,double centerX,double centerZ
     /** Project the footprint within a horizontal slab. The limit circle is clipped separately. */
     public boolean spanX(double z0,double z1,int reach,double[] result){
         if(reach<=0)return false;
+        if(amount==0){
+            double dz=Math.max(Math.max(z0-centerZ,centerZ-z1),0);if(dz>reach)return false;
+            double half=Math.sqrt((double)reach*reach-dz*dz);
+            result[0]=centerX-half;result[1]=centerX+half;return true;
+        }
         double side=1-.5*amount,front=1+.5*amount,ss=side*side,ff=front*front;
         double horizontal=ss*directionX*directionX+ff*directionZ*directionZ;
         double vertical=ff*directionX*directionX+ss*directionZ*directionZ;

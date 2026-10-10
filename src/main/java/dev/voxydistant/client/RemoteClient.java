@@ -234,7 +234,7 @@ public final class RemoteClient {
         s.requestedRadius=requested;
         if((motion.amount()!=0||motion.centerX()!=motion.x()||motion.centerZ()!=motion.z())&&(s.movementRevision!=motion.revision()||radius!=s.radius||indexChanged))radius=Math.min(radius,coverage.limitShape(motion.shape(radius,s.hello.radius()),Math.min(radius,input.renderRadius())));
         boolean teleportMove=s.x!=Integer.MIN_VALUE&&(Math.abs((long)x-s.x)>32||Math.abs((long)z-s.z)>32);
-        if(s.shape==null||teleportMove||s.radius!=radius||s.view!=view||s.movementRevision!=motion.revision()) {
+        if(s.x==Integer.MIN_VALUE||s.shape==null||teleportMove||s.radius!=radius||s.view!=view||s.movementRevision!=motion.revision()) {
             if(DebugLog.enabled())DebugLog.log("CLIENT move epoch={} from_x={} from_z={} x={} z={} generation={} radius={} view={}",s.epoch,s.x,s.z,x,z,s.generation+1,radius,view);
             boolean teleport=s.x!=Integer.MIN_VALUE&&(Math.abs((long)x-s.x)>32||Math.abs((long)z-s.z)>32);
             s.x=x;s.z=z;s.radius=radius;s.view=view;s.generation++;s.preempted=0;
@@ -247,7 +247,9 @@ public final class RemoteClient {
             var cancels=new ArrayList<Protocol.Cancel>();for(var entry:s.pending.entrySet()){var request=entry.getValue();long p=entry.getKey();if(!inRange(s,ChunkPos.getX(p),ChunkPos.getZ(p)))synchronized(request){if(!request.receiving&&!request.applying&&s.pending.remove(p,request))cancels.add(new Protocol.Cancel(ChunkPos.getX(p),ChunkPos.getZ(p),request.id()));}}
             for(int i=0;i<cancels.size();i+=16)send(s,List.of(),cancels.subList(i,Math.min(i+16,cancels.size())));
             s.checked.keySet().removeIf(p->!inRange(s,ChunkPos.getX(p),ChunkPos.getZ(p)));
-            s.versions.keySet().removeIf(p->!inRange(s,ChunkPos.getX(p),ChunkPos.getZ(p))&&!s.pending.containsKey(p));
+            // A prediction turn can exclude chunks that vanilla still keeps loaded.
+            // Keep their revisions so local L0 captures remain eligible when they come back into view.
+            s.versions.keySet().removeIf(p->!inRange(s,ChunkPos.getX(p),ChunkPos.getZ(p))&&!s.pending.containsKey(p)&&!s.loadedFull.contains(p));
             s.invalid.removeIf(p->!inRange(s,ChunkPos.getX(p),ChunkPos.getZ(p)));
             s.retries.moved(p->inRange(s,ChunkPos.getX(p),ChunkPos.getZ(p)),p->desired(s,p),p->urgent(s,p),System.nanoTime());
             send(s,List.of());
@@ -381,7 +383,9 @@ public final class RemoteClient {
             Long p=s.discovery.poll();if(p==null)break;
             if(s.pending.containsKey(p)||s.retries.scheduled(p)||s.checked.getOrDefault(p,5)<=desired(s,p))continue;
             Integer blocked=s.budgetInsufficient.get(p);if(blocked!=null&&desired(s,p)<=blocked)continue;
-            if(s.loadedFull.contains(p))continue;
+            // Late vanilla packets can leave this hint set after the chunk moved out of view.
+            // Let main-thread capture verify it before suppressing a discovered remote gap.
+            if(s.loadedFull.contains(p)){s.fullRetry.add(p);continue;}
             if(s.pending.size()+positions.size()>=window){var cancel=preempt(s,p,positions);if(cancel==null){s.invalid.add(p);break;}cancels.add(cancel);}
             positions.add(p);
         }
@@ -442,7 +446,7 @@ public final class RemoteClient {
             boolean progressed=stamp.version()!=requested.before.version()||stamp.level()<requested.before.level();
             boolean wake=progressed||dirtyVersion>requested.dirtyBefore||target<requested.desired();
             if(refine){DebugLog.count(CLIENT_REFINE);if(wake){s.retries.remove(p);s.invalid.add(p);}
-                else{s.invalid.remove(p);s.retries.stalled(p,requested.desired(),urgent(s,p));DebugLog.count(CLIENT_NO_PROGRESS);}}
+                else{s.invalid.remove(p);retry(s,p,"no_progress");DebugLog.count(CLIENT_NO_PROGRESS);}}
             else{s.invalid.remove(p);s.retries.remove(p);}
             if(DebugLog.verbose())DebugLog.log("CLIENT complete epoch={} generation={} request_generation={} request_desired={} x={} z={} request_id={} source={} version={} latest={} level={} desired={} refine={} reason={}",epoch,s.generation,requested.generation(),requested.desired(),ChunkPos.getX(p),ChunkPos.getZ(p),requestId,source,stamp.version(),latest,stamp.level(),target,refine,!current?"newer_version":stamp.level()>target?wake?"precision":"no_progress":"satisfied");
             refill(s);
@@ -634,12 +638,14 @@ public final class RemoteClient {
     private static void dirty(Session s,Protocol.Dirty d,long pos,long previous){
         if(s.closed)return;
         s.checked.remove(pos);s.retries.remove(pos);if(d.version()>previous)s.budgetInsufficient.remove(pos);if(!d.vanilla())s.invalid.add(pos);
-        s.discovery.dirty(pos);
         // A revision applies to the whole column, even when vanilla changed only one section.
         // Recapture loaded columns after the following vanilla packet has run on the main thread.
         s.fullRetry.add(pos);
         // Keep the existing render hierarchy while requiring a fresh revision for cache hits.
-        VoxyBridge.coverage(s.engine).restrict(d.x(),d.z(),s.hello.minY(),s.hello.maxY(),d.version());
+        var coverage=VoxyBridge.coverage(s.engine);
+        coverage.restrict(d.x(),d.z(),s.hello.minY(),s.hello.maxY(),d.version());
+        // A delayed directory reply must compare against the restricted column, not its old cached stamp.
+        s.discovery.updated(pos,coverage.directoryColumn(d.x(),d.z()));
     }
     public static boolean handles(WorldEngine world){Session s=session;return s!=null&&!s.closed&&s.engine==world;}
     public static float renderRadiusSquared(){Session s=session;if(s==null||s.closed)return -1;float blocks=Math.min(s.radius,VoxyBridge.radiusChunks())*16f;return blocks*blocks;}
@@ -723,7 +729,17 @@ public final class RemoteClient {
     }
     private static void pace(long started){double duty=DistantConfig.RECEIVE_DUTY.get();if(duty<1){long timing=DebugLog.start();java.util.concurrent.locks.LockSupport.parkNanos((long)((System.nanoTime()-started)*(1/duty-1)));DebugLog.end(CLIENT_PACE,timing);}}
     private static void failed(Session s,RuntimeException e){failure=e.toString();LOG.error("Voxy Distant receive failed",e);Minecraft.getInstance().execute(()->{if(session==s){Protocol.CHANNEL.sendToServer(new Protocol.Requests(s.epoch,0,s.view,DistantConfig.DOWNLOAD_KBPS.get(),s.networkCapacity,List.of()));close();greeting=null;}});}
-    public static String status(){if(maintenancePaused)return "服务端正在导入远景";Session s=session;return s==null?(failure.isEmpty()?"无服务端远景会话":failure):String.format(Locale.ROOT,"接收 %d 列 · %.1f MiB · 缓冲 %.1f MiB · 请求 %d%s",s.applied,s.received/1048576.0,s.memory.get()/1048576.0,s.pending.size(),s.budgetInsufficient.isEmpty()?"":" · 信用不足 "+s.budgetInsufficient.size()+" 列");}
+    public static String status(){
+        if(maintenancePaused)return "服务端正在导入远景";
+        Session s=session;
+        if(s==null){
+            if(!failure.isEmpty())return failure;
+            if(!DistantConfig.RECEIVE.get())return "服务端远景接收已关闭";
+            if(greeting!=null&&!VoxyBridge.enabled())return "等待开启 Voxy 渲染";
+            return "无服务端远景会话";
+        }
+        return String.format(Locale.ROOT,"接收 %d 列 · %.1f MiB · 缓冲 %.1f MiB · 请求 %d%s",s.applied,s.received/1048576.0,s.memory.get()/1048576.0,s.pending.size(),s.budgetInsufficient.isEmpty()?"":" · 信用不足 "+s.budgetInsufficient.size()+" 列");
+    }
     public static void close(){
         Session s=session;if(s==null)return;
         s.closed=true;session=null;
